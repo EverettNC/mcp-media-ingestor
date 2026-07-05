@@ -23,7 +23,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
 @dataclass
 class SymbolBoardEntry:
     """A symbol on the AlphaVox communication board."""
@@ -33,7 +32,6 @@ class SymbolBoardEntry:
     image_reference: str
     associated_words: List[str] = field(default_factory=list)
     emotional_weight: float = 0.0  # 0.0-1.0
-
 
 @dataclass
 class CommunicationEvent:
@@ -46,7 +44,6 @@ class CommunicationEvent:
     confidence: float
     response_time_ms: Optional[float]  # None when selection start unknown
     emotional_context: str = "neutral"
-
 
 class AlphaVox:
     """
@@ -299,6 +296,5 @@ class AlphaVox:
             "This is why AlphaVox exists.\n"
             "This is why the Christman AI Family exists."
         )
-
 
 __all__ = ["AlphaVox", "SymbolBoardEntry", "CommunicationEvent"]

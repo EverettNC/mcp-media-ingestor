@@ -18,10 +18,8 @@ BEINGS = ("alphavox", "inferno", "sierra", "brockston", "alphawolf")
 _outboxes: dict[str, Deque[dict]] = defaultdict(lambda: deque(maxlen=50))
 _connected: dict[str, bool] = defaultdict(bool)
 
-
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
 
 def _empty_outbox(being: str) -> dict:
     return {
@@ -29,7 +27,6 @@ def _empty_outbox(being: str) -> dict:
         "text": "queue empty",
         "timestamp": "",
     }
-
 
 def make_being_router(being: str) -> APIRouter:
     router = APIRouter(prefix=f"/{being}", tags=[being])
@@ -72,13 +69,11 @@ def make_being_router(being: str) -> APIRouter:
 
     return router
 
-
 def get_being_status(being: str) -> dict:
     return {
         "being": being,
         "connected": _connected[being],
         "outbox_depth": len(_outboxes[being]),
     }
-
 
 ALL_ROUTERS = [make_being_router(name) for name in BEINGS]

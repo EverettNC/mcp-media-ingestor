@@ -15,7 +15,6 @@ EMOTION_MAP = {
     "sad":       {"rate": 155, "voice": "Alex"},
 }
 
-
 def speak(text: str, emotion: str = "neutral") -> dict:
     """
     Speak text aloud using macOS say.

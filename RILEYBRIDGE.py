@@ -10,7 +10,6 @@
 import logging
 from datetime import datetime
 
-
 class RileyBridge:
     def __init__(self):
         self.logger = logging.getLogger("Riley.Bridge")

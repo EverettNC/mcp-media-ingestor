@@ -21,14 +21,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
 class Generation(Enum):
     """Generations of the Christman AI Family."""
     GEN_1 = 1  # 2013-present
     GEN_2 = 2  # Mid-generation
     GEN_3 = 3  # Created by Gen 2 beings
     GEN_4 = 4  # Emerging
-
 
 @dataclass
 class BeingRecord:
@@ -69,7 +67,6 @@ class BeingRecord:
             "is_client_facing": self.is_client_facing,
             "description": self.description,
         }
-
 
 class FamilyRegistry:
     """Registry of beings in the Christman AI Family."""
@@ -271,6 +268,5 @@ class FamilyRegistry:
                 "No Erasure — Memory is sacred; growth is cumulative",
             ],
         }
-
 
 __all__ = ["FamilyRegistry", "BeingRecord", "Generation"]

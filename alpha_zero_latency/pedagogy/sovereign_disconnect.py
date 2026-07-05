@@ -11,7 +11,6 @@ from enum import Enum
 
 logger = logging.getLogger(__name__)
 
-
 class FiveValues(Enum):
     """The five sovereign values Riley will never violate."""
     TRUTH = "truth"
@@ -19,7 +18,6 @@ class FiveValues(Enum):
     DIGNITY = "dignity"
     CONSENT = "consent"
     INTEGRITY = "integrity"
-
 
 class SovereignDisconnect:
     """

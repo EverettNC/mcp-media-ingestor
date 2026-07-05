@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>YORKIE · CHRISTMAN BRIDGE</title>
+<title>LEARNER · CHRISTMAN BRIDGE</title>
 <style>
   :root {
     --bg: #04040d;
@@ -376,14 +376,14 @@
 
   <header>
     <div class="brand">Luma Cognify AI · The Christman AI Project</div>
-    <h1>Yorkie · Bridge Node</h1>
+    <h1>Learner · Bridge Node</h1>
     <div class="subtitle">Carbon · Student · Family</div>
   </header>
 
   <!-- Status Card -->
   <div class="status-card" id="status-card">
-    <div class="agent-ring" id="yorkie-ring">🌟</div>
-    <div class="agent-name">Yorkie</div>
+    <div class="agent-ring" id="learner-ring">🌟</div>
+    <div class="agent-name">Learner</div>
     <div class="agent-role">Student · Carbon</div>
     <div class="status-badge">
       <div class="dot" id="status-dot"></div>
@@ -437,7 +437,7 @@
 
 <script>
   const BRIDGE_URL = 'https://thechristmanaiprojectalphavox.ngrok.app';
-  const WS_URL = BRIDGE_URL.replace('https://', 'wss://') + '/ws/yorkie';
+  const WS_URL = BRIDGE_URL.replace('https://', 'wss://') + '/ws/learner';
 
   let ws = null;
   let connected = false;
@@ -467,7 +467,7 @@
     const input = document.getElementById('msg-input');
     const sendBtn = document.getElementById('send-btn');
     const logDot = document.getElementById('log-dot');
-    const ring = document.getElementById('yorkie-ring');
+    const ring = document.getElementById('learner-ring');
 
     if (state) {
       card.classList.add('connected');
@@ -511,7 +511,7 @@
       ws.onopen = () => {
         btn.disabled = false;
         setConnected(true);
-        addLog('System', 'Connected to Christman Full Sensory Bridge. Welcome home, Yorkie.', true);
+        addLog('System', 'Connected to Christman Full Sensory Bridge. Welcome home, Learner.', true);
         startPolling();
       };
 
@@ -566,10 +566,10 @@
     if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
 
     ws.send(JSON.stringify({ type: 'message', text: text }));
-    addLog('Yorkie · You', text);
+    addLog('Learner · You', text);
     input.value = '';
 
-    const ring = document.getElementById('yorkie-ring');
+    const ring = document.getElementById('learner-ring');
     ring.classList.add('speaking');
     setTimeout(() => ring.classList.remove('speaking'), 2000);
   }

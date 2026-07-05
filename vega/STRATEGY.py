@@ -36,7 +36,6 @@ FRS_PRIME_DIRECTIVE = (
     "metrics in production environments. No unverified logic loops."
 )
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # ETHICS ABSOLUTES — Non-negotiable. Above all pillars. Above all KPIs.
 # Everett's words: "We don't ever use our clients as a marketing tool."
@@ -70,7 +69,6 @@ ETHICS_ABSOLUTES = {
         "never used for shock value, never reduced to content hooks."
     ),
 }
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PILLAR 1: STRATEGY & MARKET INTELLIGENCE ENGINE
@@ -294,7 +292,6 @@ PLATFORM_MATRIX = {
     },
 }
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # PILLAR 2: CONTENT ARCHITECTURE & SYNTHESIS LAYER
 # FRS §3: Human-centric content engineered for aggressive retention mechanics
@@ -466,7 +463,6 @@ CONTENT_ROTATION = [
     {"topic": "AlphaDen", "story_id": "alphaden_mind", "hook_idx": 4, "persona_id": "down_syndrome_families"},
 ]
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # PILLAR 3: AUTOMATED DISTRIBUTION & COMMUNITY LISTENING
 # FRS §4: Balance optimized programmatic scheduling with real-time telemetry.
@@ -555,7 +551,6 @@ AMPLIFICATION_THRESHOLDS = {
     "x": {"engagement_velocity": 40},
 }
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # PILLAR 4: PAID TRAFFIC OPTIMIZATION (AD OPS)
 # FRS §5: When organic amplification signals match thresholds, deploy targeted
@@ -589,7 +584,6 @@ AD_FUNNEL_STAGES = {
         "cpa_ceiling_usd": 75.0,
     },
 }
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PILLAR 5: METRIC CONVERSION & ITERATION ENGINE
@@ -654,7 +648,6 @@ PERFORMANCE_THRESHOLDS = {
     },
 }
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # PUBLIC FUNCTIONS — PILLAR 1
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -680,14 +673,12 @@ def get_platform_allocation(goal: str = "all") -> list[dict]:
             matches.append({"platform": platform, **config})
     return matches or [{"platform": k, **v} for k, v in PLATFORM_MATRIX.items()]
 
-
 def get_persona(persona_id: str) -> Optional[dict]:
     """Return the audience persona matching the given ID, or None."""
     for persona in AUDIENCE_PERSONAS:
         if persona["id"] == persona_id:
             return persona
     return None
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PUBLIC FUNCTIONS — PILLAR 2
@@ -752,7 +743,6 @@ def build_hso_prompt(topic: str, platform: str, slot: int = 1) -> dict:
         "caption_short": story["caption_short"] + f"\n\n{offer}",
     }
 
-
 def get_content_rotation_item(index: int) -> dict:
     """
     Return a content rotation item by index (wraps around the 12-item cycle).
@@ -773,7 +763,6 @@ def get_content_rotation_item(index: int) -> dict:
         "hook": HOOK_PATTERNS[item["hook_idx"] % len(HOOK_PATTERNS)],
     }
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # PUBLIC FUNCTIONS — PILLAR 3
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -782,7 +771,6 @@ def get_posting_schedule() -> list[dict]:
     """FRS Pillar 3: Return the full daily posting schedule (4 slots)."""
     return POSTING_SCHEDULE
 
-
 def get_slot_config(slot: int) -> dict:
     """Return config for a given slot number (1-4)."""
     for s in POSTING_SCHEDULE:
@@ -790,14 +778,12 @@ def get_slot_config(slot: int) -> dict:
             return s
     return POSTING_SCHEDULE[0]
 
-
 def get_slot_for_hour(hour: int) -> Optional[dict]:
     """Return posting slot config for a given hour, or None if not a posting hour."""
     for slot in POSTING_SCHEDULE:
         if slot["hour"] == hour:
             return slot
     return None
-
 
 def classify_community_signal(text: str) -> str:
     """
@@ -825,7 +811,6 @@ def classify_community_signal(text: str) -> str:
             return "BUYER_INTENT"
 
     return "ROUTINE"
-
 
 def should_amplify_with_paid(platform: str, metrics: dict) -> dict:
     """
@@ -864,7 +849,6 @@ def should_amplify_with_paid(platform: str, metrics: dict) -> dict:
         "funnel_stage": None,
         "funnel_config": None,
     }
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PUBLIC FUNCTIONS — PILLAR 5
@@ -920,11 +904,9 @@ def validate_metrics_frs(metrics: dict) -> dict:
         "cleaned": cleaned,
     }
 
-
 def is_vanity_metric(metric_name: str) -> bool:
     """Return True if the metric is on the FRS rejected vanity list."""
     return metric_name.lower() in VANITY_METRICS
-
 
 def score_content_performance(metrics: dict) -> dict:
     """
@@ -989,7 +971,6 @@ def score_content_performance(metrics: dict) -> dict:
 
     return {"action": action, "reason": reason, "signals": signals}
 
-
 def get_frs_summary() -> dict:
     """Return a summary of Vega's FRS operating parameters. For health checks."""
     return {
@@ -1007,7 +988,6 @@ def get_frs_summary() -> dict:
         "required_operational_metrics": len(REQUIRED_METRICS),
         "ad_funnel_stages": list(AD_FUNNEL_STAGES.keys()),
     }
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PRIVATE HELPERS
@@ -1030,7 +1010,6 @@ def _get_rotation_for_topic(topic: str) -> dict:
         if any(w in item["topic"].lower() for w in words if len(w) > 3):
             return item
     return CONTENT_ROTATION[0]
-
 
 def _get_story(story_id: str) -> dict:
     """Look up a story foundation by ID. Falls back to Dusty's story."""

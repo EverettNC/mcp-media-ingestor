@@ -37,7 +37,6 @@ logger = logging.getLogger("vega.daily_engine")
 
 ALL_PLATFORMS = ["instagram", "tiktok", "linkedin", "facebook", "x", "clapper"]
 
-
 # ── FRS Content Rotation ───────────────────────────────────────────────────────
 
 def _get_rotation_index(slot: int) -> int:
@@ -48,7 +47,6 @@ def _get_rotation_index(slot: int) -> int:
     """
     day_of_year = int(datetime.now().strftime("%j"))
     return (day_of_year * 4 + slot) % 12
-
 
 def _build_hso_post(slot: int, platform: str) -> dict:
     """
@@ -90,11 +88,9 @@ def _build_hso_post(slot: int, platform: str) -> dict:
         "offer": hso["offer"],
     }
 
-
 def _use_brollbaby() -> bool:
     """50/50 chance of using brollbaby vs new AI generation."""
     return random.random() < 0.5
-
 
 def _alert_everett(message: str) -> None:
     """
@@ -111,7 +107,6 @@ def _alert_everett(message: str) -> None:
     if sys.platform == "darwin":
         safe_msg = message.replace('"', "'")[:200]
         os.system(f'say -v Daniel "vega alert. {safe_msg}"')
-
 
 # ── Content Generation ─────────────────────────────────────────────────────────
 
@@ -160,7 +155,6 @@ def generate_post_all_platforms(slot: int) -> None:
     summary += "→ Review files and post when ready."
 
     _alert_everett(summary)
-
 
 def generate_post(
     slot: int,
@@ -286,7 +280,6 @@ def generate_post(
         _alert_everett(f"⚠️ Slot {slot+1}/4 crashed on {platform.upper()}: {e}")
         return {"status": "error", "slot": slot + 1, "platform": platform, "reason": str(e)}
 
-
 # ── Scheduler ──────────────────────────────────────────────────────────────────
 
 def run_daily_engine() -> None:
@@ -351,7 +344,6 @@ def run_daily_engine() -> None:
     except KeyboardInterrupt:
         print("\n[vega.Daily] Stopped.")
         scheduler.shutdown()
-
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

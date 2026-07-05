@@ -20,7 +20,6 @@ BLUE = (0, 132, 255)
 WHITE = (240, 244, 255)
 MUTED = (180, 190, 210)
 
-
 def _fonts(h: int):
     from PIL import ImageFont
     try:
@@ -32,7 +31,6 @@ def _fonts(h: int):
     except OSError:
         d = ImageFont.load_default()
         return d, d, d
-
 
 def render_title_card_png(
     title: str,
@@ -71,7 +69,6 @@ def render_title_card_png(
     img.save(output_path, "PNG")
     return output_path
 
-
 def png_to_title_card_mp4(
     png_path: str,
     output_path: str,
@@ -99,7 +96,6 @@ def png_to_title_card_mp4(
     except Exception as e:
         logger.error(f"[PillowOverlay] PNG→MP4 error: {e}")
         return None
-
 
 def render_caption_png(
     caption_text: str,
@@ -140,7 +136,6 @@ def render_caption_png(
 
     overlay.save(output_path, "PNG")
     return output_path
-
 
 def overlay_png_on_video(
     video_path: str,

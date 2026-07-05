@@ -24,11 +24,9 @@ logger = logging.getLogger("vega.voice.narrator")
 AUDIO_OUTPUT_DIR  = Path(__file__).resolve().parents[2] / "vega_output" / "audio"
 CHRISTMAN_SDK     = Path("/Users/EverettN/Christman-Sound")
 
-
 def _ensure_audio_dir() -> Path:
     AUDIO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     return AUDIO_OUTPUT_DIR
-
 
 def generate_voiceover(
     script: str,
@@ -98,7 +96,6 @@ def generate_voiceover(
     )
     logger.error(f"[Vega.Narrator] {reason}")
     return {"status": "error", "reason": reason}
-
 
 def _estimate_duration(script: str, words_per_minute: int = 150) -> float:
     return round((len(script.split()) / words_per_minute) * 60, 1)

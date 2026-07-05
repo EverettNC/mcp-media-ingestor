@@ -31,7 +31,6 @@ APPROVED_FILE = Path("/Users/EverettN/vega/vega/data/approved.json")
 
 app = Flask(__name__, static_folder=None)
 
-
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def load_posts() -> list[dict]:
@@ -79,7 +78,6 @@ def scan_videos() -> list[dict]:
             "approved":  post.get("id", f.stem) in approved_ids,
         })
     return videos
-
 
 # ── API routes ─────────────────────────────────────────────────────────────────
 
@@ -133,7 +131,6 @@ def theater():
 @app.route("/api/queue")
 def api_queue():
     return jsonify(load_approved())
-
 
 # ── Theater HTML ───────────────────────────────────────────────────────────────
 

@@ -10,7 +10,6 @@ from alpha_zero_latency.pedagogy.sovereign_disconnect import SovereignDisconnect
 
 logger = logging.getLogger(__name__)
 
-
 class RileyBridge:
     def __init__(self, instance_id: str = "instance_309"):
         self.instance_id = instance_id

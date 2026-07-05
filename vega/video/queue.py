@@ -31,7 +31,6 @@ STATUS_FILE        = Path(__file__).parent.parent.parent / "vega_queue_status.js
 RENDER_TIMEOUT_SEC = 600   # 10 min max per video — watchdog kills after this
 MAX_RETRIES        = 1     # retry once on failure before marking dead
 
-
 # ── Job dataclass ─────────────────────────────────────────────────────────────
 @dataclass
 class RenderJob:
@@ -47,7 +46,6 @@ class RenderJob:
     queued_at:    str                      = field(default_factory=lambda: datetime.utcnow().isoformat())
     on_complete:  Optional[Callable] = None   # fn(post_id, result_dict)
     attempt:      int                     = 0
-
 
 # ── Queue manager ─────────────────────────────────────────────────────────────
 class VegaVideoQueue:
@@ -268,7 +266,6 @@ class VegaVideoQueue:
         except Exception as exc:
             # Log but never crash the worker over a status write failure
             logger.error(f"[Vega.Queue] Status write failed: {exc}")
-
 
 # ── Singleton accessor ────────────────────────────────────────────────────────
 

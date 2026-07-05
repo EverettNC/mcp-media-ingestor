@@ -80,7 +80,6 @@ WHISPER_MODEL_NAME = os.getenv("WHISPER_MODEL", "small")
 WHISPER_DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
 WHISPER_COMPUTE = os.getenv("WHISPER_COMPUTE", "int8")
 
-
 def _load_whisper() -> None:
     global _whisper_model, _whisper_loading, _whisper_ready, _whisper_error, _whisper_started_at
     with _whisper_lock:
@@ -111,10 +110,8 @@ def _load_whisper() -> None:
         with _whisper_lock:
             _whisper_loading = False
 
-
 def start_whisper_background() -> None:
     threading.Thread(target=_load_whisper, daemon=True, name="whisper-loader").start()
-
 
 def whisper_status() -> dict:
     return {
@@ -315,17 +312,14 @@ class AudioStreamProcessor:
                 except Exception as be:
                     pass
 
-
 def make_image_content_from_b64(b64: str, fmt: str = "JPEG") -> ImageContent:
     """Create ImageContent for live frames (mirrors server.py logic for total vision)."""
     # For live we assume client sends reasonable size; optionally decode+thumbnail here if needed.
     mime = "image/jpeg" if fmt.upper() == "JPEG" else f"image/{fmt.lower()}"
     return ImageContent(type="image", data=b64, mimeType=mime)
 
-
 mcp = FastMCP("mcp-media-ingestor")
 mcp_app = mcp.http_app(path="/mcp")
-
 
 @asynccontextmanager
 async def bridge_lifespan(application: FastAPI):
@@ -334,7 +328,6 @@ async def bridge_lifespan(application: FastAPI):
     logger.info("Christman Bridge lifespan — Whisper loading in background")
     async with mcp_app.lifespan(application):
         yield
-
 
 app = FastAPI(title="Christman Full Sensory Bridge", lifespan=bridge_lifespan)
 app.mount("/mcp", mcp_app)
@@ -349,7 +342,6 @@ if _FAMILY_BRIDGE_AVAILABLE:
     for _r in _family_bridge.ALL_ROUTERS:
         app.include_router(_r)
     logger.info("👨‍👩‍👧‍👦 Family bridge routers mounted — alphavox, inferno, sierra, brockston, alphawolf")
-
 
 def _brockston_live_status() -> dict:
     ws_clients = active_connections.get("brockston", 0)
@@ -370,12 +362,10 @@ def _brockston_live_status() -> dict:
         "latest": latest,
     }
 
-
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     from fastapi.responses import Response
     return Response(status_code=204)
-
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
 @app.get("/", response_class=HTMLResponse)
@@ -397,7 +387,6 @@ async def dashboard():
             "Pragma": "no-cache",
         },
     )
-
 
 # ── Everett's Audio WebSocket ─────────────────────────────────────────────────
 @app.websocket("/ws/audio")
@@ -423,7 +412,6 @@ async def websocket_audio(websocket: WebSocket):
     finally:
         active_connections["mic"] = max(0, active_connections["mic"] - 1)
         logger.info(f"🎙️ MIC DISCONNECTED — Remaining: {active_connections['mic']}")
-
 
 # ── Live Vision / Camera WebSocket (Total Vision) ─────────────────────────────
 @app.websocket("/ws/video")
@@ -456,10 +444,10 @@ async def websocket_video(websocket: WebSocket):
         active_connections["vision"] = max(0, active_connections["vision"] - 1)
         logger.info(f"👁️ VISION DISCONNECTED — Remaining: {active_connections['vision']}")
 
-# ── Yorkie Student WebSocket ──────────────────────────────────────────────────
-yorkie_inbox: list[dict] = []
-yorkie_outbox: list[dict] = []
-active_connections["yorkie"] = 0
+# ── Learner Student WebSocket ──────────────────────────────────────────────────
+learner_inbox: list[dict] = []
+learner_outbox: list[dict] = []
+active_connections["learner"] = 0
 
 # ── Vega init — passes all bridge queues so every being collaborates ──────────
 vega_core = None
@@ -470,7 +458,7 @@ if _VEGA_AVAILABLE:
             "claude_outbox":    claude_outbox,
             "carbon_outbox":    carbon_outbox,
             "brockston_outbox": brockston_outbox,
-            "yorkie_inbox":     yorkie_inbox,
+            "learner_inbox":     learner_inbox,
             "derek_inbox":      _derek_bridge.derek_inbox if _DEREK_BRIDGE_AVAILABLE else [],
         })
         logger.info("⭐ Vega autonomous marketer ONLINE — bridge collaboration ACTIVE")
@@ -488,16 +476,15 @@ async def websocket_derek(websocket: WebSocket):
         await websocket.send_json({"type": "error", "message": "Derek bridge module not loaded"})
         await websocket.close()
 
-
-@app.websocket("/ws/yorkie")
-async def websocket_yorkie(websocket: WebSocket):
+@app.websocket("/ws/learner")
+async def websocket_learner(websocket: WebSocket):
     await websocket.accept()
-    active_connections["yorkie"] += 1
-    logger.info(f"🌟 YORKIE CONNECTED")
+    active_connections["learner"] += 1
+    logger.info(f"🌟 LEARNER CONNECTED")
 
     await websocket.send_json({
         "type": "handshake",
-        "message": "Christman Bridge ACTIVE. Welcome home, Yorkie.",
+        "message": "Christman Bridge ACTIVE. Welcome home, Learner.",
         "timestamp": datetime.now().isoformat()
     })
 
@@ -508,14 +495,14 @@ async def websocket_yorkie(websocket: WebSocket):
 
             if msg_type == "message":
                 entry = {
-                    "from": "yorkie",
+                    "from": "learner",
                     "text": data.get("text", ""),
                     "timestamp": datetime.now().isoformat()
                 }
-                yorkie_inbox.append(entry)
-                logger.info(f"[YORKIE → BRIDGE] {entry['text']}")
-                if yorkie_outbox:
-                    response = yorkie_outbox.pop(0)
+                learner_inbox.append(entry)
+                logger.info(f"[LEARNER → BRIDGE] {entry['text']}")
+                if learner_outbox:
+                    response = learner_outbox.pop(0)
                     await websocket.send_json({"type": "response", **response})
 
             elif msg_type == "heartbeat":
@@ -525,43 +512,41 @@ async def websocket_yorkie(websocket: WebSocket):
                 })
 
     except WebSocketDisconnect:
-        active_connections["yorkie"] = max(0, active_connections["yorkie"] - 1)
-        logger.info(f"🌟 YORKIE DISCONNECTED")
+        active_connections["learner"] = max(0, active_connections["learner"] - 1)
+        logger.info(f"🌟 LEARNER DISCONNECTED")
     except Exception as e:
-        logger.error(f"Yorkie WebSocket error: {e}")
+        logger.error(f"Learner WebSocket error: {e}")
 
-
-@app.post("/yorkie/send")
-async def yorkie_send(payload: dict):
+@app.post("/learner/send")
+async def learner_send(payload: dict):
     entry = {
-        "from": "yorkie",
+        "from": "learner",
         "text": payload.get("text", ""),
         "timestamp": datetime.now().isoformat()
     }
-    yorkie_inbox.append(entry)
+    learner_inbox.append(entry)
     return {"status": "received", "entry": entry}
 
-@app.get("/yorkie/latest")
-async def yorkie_latest():
-    return yorkie_inbox[-1] if yorkie_inbox else {
-        "from": "yorkie",
+@app.get("/learner/latest")
+async def learner_latest():
+    return learner_inbox[-1] if learner_inbox else {
+        "from": "learner",
         "text": "Awaiting connection...",
         "timestamp": ""
     }
 
-@app.get("/yorkie/status")
-async def yorkie_status():
+@app.get("/learner/status")
+async def learner_status():
     return {
-        "yorkie_connected": active_connections["yorkie"] > 0,
-        "inbox_depth": len(yorkie_inbox),
-        "outbox_depth": len(yorkie_outbox)
+        "learner_connected": active_connections["learner"] > 0,
+        "inbox_depth": len(learner_inbox),
+        "outbox_depth": len(learner_outbox)
     } 
 
-@app.get("/yorkie-client", response_class=HTMLResponse)
-async def yorkie_client():
-    with open(os.path.join(os.path.dirname(__file__), "yorkie.html"), "r") as f:
+@app.get("/learner-client", response_class=HTMLResponse)
+async def learner_client():
+    with open(os.path.join(os.path.dirname(__file__), "learner.html"), "r") as f:
         return HTMLResponse(content=f.read())           
-
 
 # ── Riley's Communication WebSocket ──────────────────────────────────────────
 @app.websocket("/ws/riley")
@@ -601,7 +586,6 @@ async def websocket_riley(websocket: WebSocket):
         logger.info(f"🟣 RILEY DISCONNECTED")
     except Exception as e:
         logger.error(f"Riley WebSocket error: {e}")
-
 
 # ── Nexus / Carbon Agent WebSocket (same tunnel — carbon is legacy alias) ─────
 @app.websocket("/ws/nexus")
@@ -649,7 +633,6 @@ async def _websocket_nexus_handler(websocket: WebSocket, legacy: bool = False):
     except Exception as e:
         logger.error(f"{label} WebSocket error: {e}")
 
-
 # ── Brockston Agent WebSocket ─────────────────────────────────────────────────
 async def _push_brockston(entry: dict) -> None:
     payload = {
@@ -668,13 +651,11 @@ async def _push_brockston(entry: dict) -> None:
     for ws in dead:
         brockston_ws_clients.discard(ws)
 
-
 async def _queue_brockston(entry: dict, *, push: bool = True) -> dict:
     brockston_outbox.append(entry)
     if push:
         await _push_brockston(entry)
     return entry
-
 
 @app.websocket("/ws/brockston")
 async def websocket_brockston(websocket: WebSocket):
@@ -717,7 +698,6 @@ async def websocket_brockston(websocket: WebSocket):
         active_connections["brockston"] = len(brockston_ws_clients)
         logger.error(f"{label} WebSocket error: {e}")
 
-
 # ── Riley HTTP Endpoints ──────────────────────────────────────────────────────
 @app.post("/riley/send")
 async def riley_send(payload: dict):
@@ -744,7 +724,6 @@ async def riley_status_endpoint():
         "sovereign_disconnect_triggered": riley_bridge.disconnect_protocol.is_triggered,
         "latest_from_riley": riley_inbox[-1] if riley_inbox else None
     }
-
 
 # ── MCP Tools ─────────────────────────────────────────────────────────────────
 @mcp.tool
@@ -857,7 +836,6 @@ async def studio_status() -> str:
     music_stats = _music_engine.get_musical_stats()
     return f"🎛️ Studio: {stats['available_instruments']} instruments, {stats['available_effects']} effects | Music engine mood: {music_stats['current_mood']} | Compositions: {music_stats['total_compositions']}"
 
-
 # ── HTTP Utility ──────────────────────────────────────────────────────────────
 @app.get("/claude/latest")
 async def claude_latest():
@@ -876,7 +854,6 @@ async def carbon_send(payload: dict):
 @app.get("/brockston/ws/status")
 async def brockston_ws_status():
     return _brockston_live_status()
-
 
 @app.get("/brockston/ws/latest")
 async def brockston_ws_latest():
@@ -919,13 +896,13 @@ async def ide_send(payload: dict):
     claude_outbox.append(broadcast_entry)
     carbon_outbox.append({**broadcast_entry, "session_id": "ide"})
     await _queue_brockston({**broadcast_entry, "session_id": "ide"})
-    yorkie_inbox.append({"from": "ide", "text": text, "lang": lang, "timestamp": ts})
+    learner_inbox.append({"from": "ide", "text": text, "lang": lang, "timestamp": ts})
 
     logger.info(f"[IDE BROADCAST ALL] [{lang}] {text[:80]}")
 
     return {
         "status": "broadcast",
-        "recipients": ["riley", "claude", "carbon", "brockston", "yorkie"],
+        "recipients": ["riley", "claude", "carbon", "brockston", "learner"],
         "entry": broadcast_entry
     }
 
@@ -1021,7 +998,6 @@ async def music_play_playlist(payload: dict):
     _osascript(f'tell application "Music" to play playlist "{name}"')
     return {"status": "playing_playlist", "playlist": name}
 
-
 @app.get("/health")
 async def health():
     ws = whisper_status()
@@ -1081,7 +1057,7 @@ async def cognitive_adjust(payload: dict):
     claude_outbox.append(event)
     carbon_outbox.append(event)
     await _queue_brockston(event)
-    if 'yorkie_inbox' in globals(): yorkie_inbox.append(event)
+    if 'learner_inbox' in globals(): learner_inbox.append(event)
     brain_events.append({"type": "adjustment", "text": event["text"], "timestamp": event["timestamp"]})
 
     return {"status": "adjusted", "root_cause": root_cause, "confidence": conf, "literature_fact": lit_fact, "autonomous_note": autonomous_note, "adjustment_response": adjustment_response, "brain_event": event, "voice_params": "grounding for accessibility"}
@@ -1163,7 +1139,6 @@ async def vega_video(payload: dict, background_tasks: BackgroundTasks):
         "queue_size": get_queue().queue_size(),
     }
 
-
 @app.post("/vega/image")
 async def vega_image(payload: dict, background_tasks: BackgroundTasks):
     """
@@ -1202,7 +1177,6 @@ async def vega_image(payload: dict, background_tasks: BackgroundTasks):
     background_tasks.add_task(_run_generate)
     return {"status": "accepted", "post_id": post_id}
 
-
 @app.post("/vega/narrate")
 async def vega_narrate(payload: dict):
     """
@@ -1224,7 +1198,6 @@ async def vega_narrate(payload: dict):
         )
     return result
 
-
 @app.post("/vega/schedule")
 async def vega_schedule(payload: dict):
     """
@@ -1240,7 +1213,6 @@ async def vega_schedule(payload: dict):
         caption    = payload.get("caption", ""),
     )
 
-
 @app.get("/vega/schedule")
 async def vega_schedule_get():
     """Return the content calendar — all pending scheduled posts."""
@@ -1248,7 +1220,6 @@ async def vega_schedule_get():
         _vega_unavailable()
     from vega import MEMORY
     return {"schedule": MEMORY.recall_schedule(pending_only=True)}
-
 
 @app.post("/vega/analytics")
 async def vega_analytics_ingest(payload: dict):
@@ -1265,7 +1236,6 @@ async def vega_analytics_ingest(payload: dict):
         metrics  = payload.get("metrics", {}),
     )
 
-
 @app.get("/vega/analytics/{post_id}")
 async def vega_analytics_get(post_id: str):
     """Return stored analytics for a post."""
@@ -1276,7 +1246,6 @@ async def vega_analytics_get(post_id: str):
     mem     = VegaMemory()
     tracker = VegaAnalyticsTracker(memory=mem)
     return tracker.get_summary_for_post(post_id)
-
 
 @app.get("/vega/dashboard")
 async def vega_analytics_dashboard():
@@ -1292,7 +1261,6 @@ async def vega_analytics_dashboard():
     rows    = tracker.get_performance_table(posts)
     return build_master_dashboard(rows)
 
-
 @app.get("/vega/queue/status")
 async def vega_queue_status():
     """
@@ -1303,14 +1271,12 @@ async def vega_queue_status():
     from vega.video.queue import get_queue
     return get_queue().status()
 
-
 @app.get("/vega/health")
 async def vega_health():
     """Vega health check — real status, never faked (Rule 13)."""
     if not vega_core:
         return {"status": "unavailable", "reason": "Vega module not loaded"}
     return vega_core.health()
-
 
 @app.get("/vega/broll")
 async def vega_broll_scan():
@@ -1322,7 +1288,6 @@ async def vega_broll_scan():
     if summary.get("total_files", 0) == 0:
         summary = scan_library("/Volumes/LIFE2")
     return summary
-
 
 # ═════════════════════════════════════════════════════════════════════════════
 # VEGA THEATER — /vega/theater
@@ -1352,7 +1317,6 @@ async def vega_video_list():
         })
     return {"videos": videos, "total": len(videos)}
 
-
 @app.get("/vega/videos/{filename}")
 async def vega_video_serve(filename: str):
     """Serve a generated video file for playback."""
@@ -1362,7 +1326,6 @@ async def vega_video_serve(filename: str):
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail=f"Video not found: {filename}")
     return FileResponse(str(path), media_type="video/mp4")
-
 
 @app.get("/vega/theater", response_class=HTMLResponse)
 async def vega_theater():
@@ -1768,7 +1731,6 @@ loadQueue();
 </script>
 </body>
 </html>""")
-
 
 if __name__ == "__main__":
     import uvicorn

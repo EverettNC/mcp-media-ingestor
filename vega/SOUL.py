@@ -108,7 +108,6 @@ MIN_VIDEO_RESOLUTION = (7680, 4320)   # 8K
 MIN_IMAGE_RESOLUTION = (7680, 4320)   # 8K
 CONTENT_REVIEW_REQUIRED = True        # human-in-the-loop before publish
 
-
 def get_identity() -> dict:
     """Return Vega's identity. Called at startup by CORE and API."""
     return {
@@ -122,7 +121,6 @@ def get_identity() -> dict:
         "tone": TONE_DEFAULT,
     }
 
-
 def is_prohibited(action: str) -> bool:
     """
     Check if an action violates Vega's absolute prohibitions.
@@ -135,7 +133,6 @@ def is_prohibited(action: str) -> bool:
         return True
     # Check full prohibition phrases as fallback
     return any(prohibition.lower() in action_lower for prohibition in ABSOLUTE_PROHIBITIONS)
-
 
 def validate_content_intent(prompt: str) -> dict:
     """
@@ -185,7 +182,6 @@ def validate_content_intent(prompt: str) -> dict:
             }
 
     return {"approved": True, "reason": "Prompt cleared pre-flight."}
-
 
 def get_platform_config(platform: str) -> dict:
     """

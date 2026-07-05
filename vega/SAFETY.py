@@ -39,7 +39,6 @@ PLATFORM_POLICIES = {
     "x": ["no targeted harassment", "no synthetic media without disclosure"],
 }
 
-
 def validate_prompt(prompt: str, platform: Optional[str] = None) -> dict:
     """
     Validate a content prompt before generation begins.
@@ -79,7 +78,6 @@ def validate_prompt(prompt: str, platform: Optional[str] = None) -> dict:
 
     return {"approved": True, "safe": True, "reason": "Prompt passed safety validation.", "blocked_term": None}
 
-
 def validate_file_path(path: str, expected_base: Optional[str] = None) -> dict:
     """
     Validate that a file path is safe to read/write.
@@ -111,7 +109,6 @@ def validate_file_path(path: str, expected_base: Optional[str] = None) -> dict:
 
     return {"valid": True, "safe": True, "reason": "Path is safe."}
 
-
 def validate_output(output: dict) -> bool:
     """
     Validate output before returning to the bridge or dashboard.
@@ -131,7 +128,6 @@ def validate_output(output: dict) -> bool:
         return False
 
     return True
-
 
 def validate_metrics(metrics: dict) -> dict:
     """
@@ -169,7 +165,6 @@ def validate_metrics(metrics: dict) -> dict:
 
     return {"valid": True, "reason": "Metrics validated.", "cleaned": cleaned}
 
-
 def check_env_vars(required_vars: list[str]) -> dict:
     """
     Check that required environment variables are set.
@@ -183,7 +178,6 @@ def check_env_vars(required_vars: list[str]) -> dict:
         logger.warning(f"[Vega.Safety] Missing env vars: {missing}")
         return {"ok": False, "missing": missing}
     return {"ok": True, "missing": []}
-
 
 def content_size_check(file_path: str, max_mb: float = 500.0) -> dict:
     """

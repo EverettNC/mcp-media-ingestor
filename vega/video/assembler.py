@@ -20,7 +20,6 @@ logger = logging.getLogger("vega.video.assembler")
 
 OUTPUT_DIR = Path(__file__).parent.parent.parent / "vega_output" / "video"
 
-
 def _check_ffmpeg() -> bool:
     """Verify FFmpeg is installed. Fails loud if not. (Rule 6)"""
     try:
@@ -33,11 +32,9 @@ def _check_ffmpeg() -> bool:
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return False
 
-
 def _ensure_output_dir() -> Path:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     return OUTPUT_DIR
-
 
 def get_video_duration(filepath: str) -> Optional[float]:
     """
@@ -62,7 +59,6 @@ def get_video_duration(filepath: str) -> Optional[float]:
     except Exception as e:
         logger.error(f"[Vega.Assembler] ffprobe error: {e}")
     return None
-
 
 def assemble_from_clips(
     clips: list[dict],
@@ -193,7 +189,6 @@ def assemble_from_clips(
         return {"status": "error", "reason": "FFmpeg timed out after 60 minutes."}
     finally:
         os.unlink(concat_path)
-
 
 def scale_video_to_8k(
     input_path: str,

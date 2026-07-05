@@ -37,7 +37,6 @@ PLATFORM_COLORS = {
 
 DEFAULT_METRICS = ["views", "likes", "comments", "shares"]
 
-
 def _require_plotly():
     try:
         import plotly.graph_objects as go
@@ -49,11 +48,9 @@ def _require_plotly():
             "Run: pip install plotly  (Rule 1: it has to work)"
         )
 
-
 def _ensure_output_dir() -> Path:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     return OUTPUT_DIR
-
 
 # ── Individual platform chart ─────────────────────────────────────────────────
 
@@ -135,7 +132,6 @@ def chart_platform(
 
     return {"status": "ok", "platform": platform, "html": html, "path": path}
 
-
 # ── Cross-platform comparison ─────────────────────────────────────────────────
 
 def chart_cross_platform(
@@ -193,7 +189,6 @@ def chart_cross_platform(
         path = str(out)
 
     return {"status": "ok", "metric": metric, "html": html, "path": path}
-
 
 # ── Per-post time series ──────────────────────────────────────────────────────
 
@@ -255,7 +250,6 @@ def chart_post_trend(
         path = str(out)
 
     return {"status": "ok", "html": html, "path": path}
-
 
 # ── Master dashboard ──────────────────────────────────────────────────────────
 
@@ -329,7 +323,6 @@ def build_master_dashboard(
     logger.info(f"[Vega.Visualizer] Master dashboard saved → {path}")
 
     return {"status": "ok", "path": path, "platforms_shown": seen_platforms}
-
 
 def _extract_plotly_div(full_html: str) -> str:
     """

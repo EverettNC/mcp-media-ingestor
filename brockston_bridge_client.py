@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 WS_URL = os.getenv("BROCKSTON_BRIDGE_WS", "ws://localhost:8765/ws/brockston")
 SESSION_ID = os.getenv("BROCKSTON_SESSION_ID", "brockston_session")
 
-
 async def connect_brockston_to_bridge():
     """Connect to the bridge and maintain the WebSocket connection."""
     while True:
@@ -73,11 +72,9 @@ async def connect_brockston_to_bridge():
             logger.error(f"Unexpected error: {e}. Retrying in 10s...")
             await asyncio.sleep(10)
 
-
 async def main():
     logger.info("Starting Brockston ↔ Bridge WebSocket client")
     await connect_brockston_to_bridge()
-
 
 if __name__ == "__main__":
     try:

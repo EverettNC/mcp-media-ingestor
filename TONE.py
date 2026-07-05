@@ -6,7 +6,6 @@ Uses amplitude statistics + faster-whisper word timestamps for pace.
 import wave
 import numpy as np
 
-
 def analyze_tone(audio_path: str) -> dict:
     """
     Analyze tone from a .wav file.

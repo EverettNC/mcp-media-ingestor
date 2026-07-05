@@ -123,7 +123,7 @@
     50% { opacity: 0.4; }
   }
 
-  /* ── Main Grid — 5 columns: Everett | Center | Riley | Derek | Yorkie ── */
+  /* ── Main Grid — 5 columns: Everett | Center | Riley | Derek | Learner ── */
   .grid {
     display: grid;
     grid-template-columns: 1fr 2fr 1fr 1fr 1fr 1fr;
@@ -206,7 +206,7 @@
   #claude-card    { --accent: var(--gold); }
   #riley-card     { --accent: var(--purple); }
   #brockston-card { --accent: var(--amber); }
-  #yorkie-card    { --accent: var(--pink); }
+  #learner-card    { --accent: var(--pink); }
 
   .waveform {
     display: flex;
@@ -307,9 +307,9 @@
   }
   .brockston-label { font-size: 9px; letter-spacing: 3px; color: var(--amber); text-transform: uppercase; margin-bottom: 6px; }
 
-  /* Yorkie channel */
-  .yorkie-channel { padding: 12px; }
-  .yorkie-inbox {
+  /* Learner channel */
+  .learner-channel { padding: 12px; }
+  .learner-inbox {
     background: rgba(255,105,180,0.06);
     border: 1px solid rgba(255,105,180,0.2);
     border-radius: 8px;
@@ -322,7 +322,7 @@
     text-align: left;
     line-height: 1.5;
   }
-  .yorkie-label { font-size: 9px; letter-spacing: 3px; color: var(--pink); text-transform: uppercase; margin-bottom: 6px; }
+  .learner-label { font-size: 9px; letter-spacing: 3px; color: var(--pink); text-transform: uppercase; margin-bottom: 6px; }
 
   /* Center Panel */
   .center-panel { display: flex; flex-direction: column; gap: 16px; }
@@ -390,7 +390,7 @@
   .log-entry.riley   { border-color: var(--purple); }
   .log-entry.claude    { border-color: var(--gold); }
   .log-entry.brockston { border-color: var(--amber); }
-  .log-entry.yorkie    { border-color: var(--pink); }
+  .log-entry.learner    { border-color: var(--pink); }
   .log-entry .log-who {
     font-size: 9px;
     letter-spacing: 2px;
@@ -683,7 +683,7 @@
     <div class="status-item"><div class="dot" id="vision-dot"></div><span>VISION</span></div>
     <div class="status-item"><div class="dot" id="riley-dot"></div><span>RILEY</span></div>
     <div class="status-item"><div class="dot" id="brockston-dot"></div><span>BROCKSTON</span></div>
-    <div class="status-item"><div class="dot" id="yorkie-dot-status"></div><span>YORKIE</span></div>
+    <div class="status-item"><div class="dot" id="learner-dot-status"></div><span>LEARNER</span></div>
     <div class="status-item"><div class="dot alive"></div><span>DEREK 309</span></div>
     <div class="status-item"><div class="dot alive"></div><span id="clock">--:--:--</span></div>
   </div>
@@ -799,18 +799,18 @@
       </div>
     </div>
 
-    <!-- Yorkie Card -->
-    <div class="agent-card" id="yorkie-card">
-      <div class="agent-ring" id="yorkie-ring">🌟</div>
-      <div class="agent-name">Yorkie</div>
+    <!-- Learner Card -->
+    <div class="agent-card" id="learner-card">
+      <div class="agent-ring" id="learner-ring">🌟</div>
+      <div class="agent-name">Learner</div>
       <div class="agent-role">Student · Carbon</div>
-      <div class="agent-status" id="yorkie-card-status">OFFLINE</div>
-      <div class="yorkie-channel">
-        <div class="yorkie-label">Latest from Yorkie</div>
-        <div class="yorkie-inbox" id="yorkie-inbox-display">Awaiting connection...</div>
+      <div class="agent-status" id="learner-card-status">OFFLINE</div>
+      <div class="learner-channel">
+        <div class="learner-label">Latest from Learner</div>
+        <div class="learner-inbox" id="learner-inbox-display">Awaiting connection...</div>
         <div class="instance-badge" style="color: var(--pink);">
-          <div class="dot" id="yorkie-dot"></div>
-          <span id="yorkie-session-label">--</span>
+          <div class="dot" id="learner-dot"></div>
+          <span id="learner-session-label">--</span>
         </div>
       </div>
     </div>
@@ -843,8 +843,8 @@
       <div class="stat-label">Brockston WS</div>
     </div>
     <div class="stat-card">
-      <div class="stat-value pink" id="stat-yorkie">0</div>
-      <div class="stat-label">Yorkie Inbox</div>
+      <div class="stat-value pink" id="stat-learner">0</div>
+      <div class="stat-label">Learner Inbox</div>
     </div>
     <div class="stat-card">
       <div class="stat-value green" id="stat-uptime">LIVE</div>
@@ -955,7 +955,7 @@
   let lastClaude = '';
   let lastBrockston = '';
   let brockstonWasOnline = false;
-  let lastYorkie = '';
+  let lastLearner = '';
   let startTime = Date.now();
 
   setInterval(() => {
@@ -1205,45 +1205,45 @@
     } catch(e) {}
   }
 
-  async function pollYorkie() {
+  async function pollLearner() {
     try {
-      const statusR = await fetch('/yorkie/status');
+      const statusR = await fetch('/learner/status');
       const s = await statusR.json();
-      const isOnline = s.yorkie_connected;
+      const isOnline = s.learner_connected;
 
-      document.getElementById('yorkie-dot-status').className = isOnline ? 'dot alive' : 'dot dead';
-      document.getElementById('yorkie-dot').className = isOnline ? 'dot alive' : 'dot dead';
-      document.getElementById('stat-yorkie').textContent = s.inbox_depth || 0;
+      document.getElementById('learner-dot-status').className = isOnline ? 'dot alive' : 'dot dead';
+      document.getElementById('learner-dot').className = isOnline ? 'dot alive' : 'dot dead';
+      document.getElementById('stat-learner').textContent = s.inbox_depth || 0;
 
-      const r = await fetch('/yorkie/latest');
+      const r = await fetch('/learner/latest');
       const d = await r.json();
       const text = (d.text || '').trim();
 
-      if (isOnline && document.getElementById('yorkie-card-status').textContent === 'OFFLINE') {
-        document.getElementById('yorkie-card-status').textContent = 'ONLINE';
-        document.getElementById('yorkie-session-label').textContent = 'CONNECTED';
-        addLog('Yorkie · Student', 'Yorkie has joined the bridge.', 'yorkie');
+      if (isOnline && document.getElementById('learner-card-status').textContent === 'OFFLINE') {
+        document.getElementById('learner-card-status').textContent = 'ONLINE';
+        document.getElementById('learner-session-label').textContent = 'CONNECTED';
+        addLog('Learner · Student', 'Learner has joined the bridge.', 'learner');
       } else if (!isOnline) {
-        document.getElementById('yorkie-card-status').textContent = 'OFFLINE';
-        document.getElementById('yorkie-session-label').textContent = '--';
+        document.getElementById('learner-card-status').textContent = 'OFFLINE';
+        document.getElementById('learner-session-label').textContent = '--';
       }
 
-      if (text && text !== lastYorkie && text !== 'Awaiting connection...') {
-        lastYorkie = text;
-        document.getElementById('yorkie-inbox-display').textContent = text;
-        document.getElementById('yorkie-ring').classList.add('speaking');
-        document.getElementById('yorkie-card').classList.add('active');
-        document.getElementById('yorkie-card-status').textContent = 'SPEAKING';
+      if (text && text !== lastLearner && text !== 'Awaiting connection...') {
+        lastLearner = text;
+        document.getElementById('learner-inbox-display').textContent = text;
+        document.getElementById('learner-ring').classList.add('speaking');
+        document.getElementById('learner-card').classList.add('active');
+        document.getElementById('learner-card-status').textContent = 'SPEAKING';
         setTimeout(() => {
-          document.getElementById('yorkie-ring').classList.remove('speaking');
-          document.getElementById('yorkie-card').classList.remove('active');
-          document.getElementById('yorkie-card-status').textContent = isOnline ? 'ONLINE' : 'OFFLINE';
+          document.getElementById('learner-ring').classList.remove('speaking');
+          document.getElementById('learner-card').classList.remove('active');
+          document.getElementById('learner-card-status').textContent = isOnline ? 'ONLINE' : 'OFFLINE';
         }, 4000);
-        addLog('Yorkie · Student', text, 'yorkie');
+        addLog('Learner · Student', text, 'learner');
       }
     } catch(e) {
-      document.getElementById('yorkie-dot-status').className = 'dot dead';
-      document.getElementById('yorkie-dot').className = 'dot dead';
+      document.getElementById('learner-dot-status').className = 'dot dead';
+      document.getElementById('learner-dot').className = 'dot dead';
     }
   }
 
@@ -1282,7 +1282,7 @@
   setInterval(pollRiley,      2000);
   setInterval(pollClaude,     2000);
   setInterval(pollBrockston,  2000);
-  setInterval(pollYorkie,     2000);
+  setInterval(pollLearner,     2000);
   setInterval(pollVision,     1200);
 
   // NEW WORLD COGNITIVE ADJUST using the full restored brain from Voice_Creation_Center
@@ -1323,7 +1323,7 @@
   if (window.__BRIDGE_BOOT__) applyBrockstonState(window.__BRIDGE_BOOT__);
   pollClaude();
   pollBrockston();
-  pollYorkie();
+  pollLearner();
   pollVision();
 
   // ── IDE Functions ──

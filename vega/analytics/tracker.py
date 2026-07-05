@@ -19,7 +19,6 @@ logger = logging.getLogger("vega.analytics.tracker")
 # Platforms Vega tracks
 TRACKED_PLATFORMS = ["instagram", "tiktok", "youtube", "facebook", "linkedin", "x"]
 
-
 class VegaAnalyticsTracker:
     """
     Fetches and stores post analytics from all 6 platforms.

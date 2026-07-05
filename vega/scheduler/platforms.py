@@ -19,7 +19,6 @@ from typing import Optional
 
 logger = logging.getLogger("vega.scheduler.platforms")
 
-
 class PlatformBase(ABC):
     """Abstract base for all platform integrations."""
 
@@ -46,7 +45,6 @@ class PlatformBase(ABC):
     @abstractmethod
     def get_metrics(self, post_id: str) -> dict:
         """Fetch real engagement metrics for a post."""
-
 
 # ── Instagram ─────────────────────────────────────────────────────────────────
 
@@ -140,7 +138,6 @@ class InstagramPlatform(PlatformBase):
             return {"status": "ok", "platform": "instagram", "post_id": post_id, "metrics": metrics}
         except Exception as e:
             return {"status": "error", "reason": str(e)}
-
 
 # ── YouTube ───────────────────────────────────────────────────────────────────
 
@@ -239,7 +236,6 @@ class YouTubePlatform(PlatformBase):
         except Exception as e:
             return {"status": "error", "reason": str(e)}
 
-
 # ── TikTok ────────────────────────────────────────────────────────────────────
 
 class TikTokPlatform(PlatformBase):
@@ -327,7 +323,6 @@ class TikTokPlatform(PlatformBase):
         except Exception as e:
             return {"status": "error", "reason": str(e)}
 
-
 # ── X (Twitter) ───────────────────────────────────────────────────────────────
 
 class XPlatform(PlatformBase):
@@ -399,7 +394,6 @@ class XPlatform(PlatformBase):
             }
         except Exception as e:
             return {"status": "error", "reason": str(e)}
-
 
 # ── LinkedIn ──────────────────────────────────────────────────────────────────
 
@@ -498,7 +492,6 @@ class LinkedInPlatform(PlatformBase):
         except Exception as e:
             return {"status": "error", "reason": str(e)}
 
-
 # ── Facebook ──────────────────────────────────────────────────────────────────
 
 class FacebookPlatform(PlatformBase):
@@ -555,7 +548,6 @@ class FacebookPlatform(PlatformBase):
             return {"status": "ok", "platform": "facebook", "post_id": post_id, "metrics": metrics}
         except Exception as e:
             return {"status": "error", "reason": str(e)}
-
 
 # ── Platform Factory ──────────────────────────────────────────────────────────
 

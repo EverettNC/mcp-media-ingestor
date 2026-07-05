@@ -14,7 +14,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 import pytest
 
-
 @pytest.fixture
 def mem(tmp_path, monkeypatch):
     """VegaMemory pointed at a temp directory so we don't touch real data."""
@@ -23,7 +22,6 @@ def mem(tmp_path, monkeypatch):
     m = M.VegaMemory()
     m.data_dir = tmp_path
     return m
-
 
 class TestPostMemory:
     def test_remember_post_returns_dict(self, mem):
@@ -64,7 +62,6 @@ class TestPostMemory:
         posts = mem2.recall_posts()
         assert any(p.get("post_id") == "persist_001" for p in posts)
 
-
 class TestAnalyticsMemory:
     def test_store_and_recall_analytics(self, mem):
         mem.remember_post({"post_id": "ana_001", "platform": "instagram"})
@@ -81,7 +78,6 @@ class TestAnalyticsMemory:
         """Rule 13: No data → empty list, not invented data."""
         result = mem.recall_analytics("ghost_post_xyz")
         assert result == []
-
 
 class TestScheduleMemory:
     def test_remember_scheduled_item(self, mem):
@@ -105,7 +101,6 @@ class TestScheduleMemory:
 
     def test_schedule_returns_list(self, mem):
         assert isinstance(mem.recall_schedule(), list)
-
 
 class TestMemorySummary:
     def test_summary_returns_dict(self, mem):

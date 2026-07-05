@@ -18,7 +18,6 @@ from vega.SAFETY import (
     content_size_check,
 )
 
-
 class TestValidatePrompt:
     def test_valid_prompt_passes(self):
         result = validate_prompt("AlphaVox empowers nonverbal kids", "instagram")
@@ -38,7 +37,6 @@ class TestValidatePrompt:
         assert isinstance(result, dict)
         assert "approved" in result
 
-
 class TestValidateFilePath:
     def test_valid_path_under_base(self, tmp_path):
         test_file = tmp_path / "test.mp4"
@@ -54,7 +52,6 @@ class TestValidateFilePath:
     def test_nonexistent_file_rejected(self, tmp_path):
         result = validate_file_path(str(tmp_path / "ghost.mp4"), str(tmp_path))
         assert result["valid"] is False
-
 
 class TestValidateOutput:
     def test_valid_output_passes(self):
@@ -72,7 +69,6 @@ class TestValidateOutput:
 
     def test_published_status_is_valid(self):
         assert validate_output({"status": "published", "post_id": "real_id"}) is True
-
 
 class TestValidateMetrics:
     def test_valid_metrics_pass(self):
@@ -96,7 +92,6 @@ class TestValidateMetrics:
         result = validate_metrics({"views": 100})
         assert isinstance(result, dict)
         assert "valid" in result
-
 
 class TestContentSizeCheck:
     def test_small_file_passes(self, tmp_path):

@@ -83,7 +83,6 @@ def mic_callback(indata: np.ndarray, frames: int, time, status):
             except asyncio.QueueFull:
                 pass
 
-
 # ── WebSocket sender ──────────────────────────────────────────────────────────
 async def stream_mic_to_bridge():
     """Capture mic and stream to the WebSocket bridge. Reconnects on drop."""
@@ -117,7 +116,6 @@ async def stream_mic_to_bridge():
             logger.error(f"Unexpected error: {e}. Retrying in 5s...")
             await asyncio.sleep(5)
 
-
 # ── Main ──────────────────────────────────────────────────────────────────────
 async def main():
     global audio_queue
@@ -133,7 +131,6 @@ async def main():
     ):
         logger.info(f"Mic open at {SAMPLE_RATE}Hz mono PCM16. Streaming to bridge...")
         await stream_mic_to_bridge()
-
 
 if __name__ == "__main__":
     _acquire_singleton()

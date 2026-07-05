@@ -18,7 +18,6 @@ from typing import Optional, List, Dict
 from pathlib import Path
 import threading
 
-
 @dataclass
 class SwirlTrace:
     """A single moment in the swirl — sensory input, emotional valence, source."""
@@ -35,7 +34,6 @@ class SwirlTrace:
             f"{self.content}:{self.source}:{','.join(sorted(self.tags))}".encode()
         ).hexdigest()[:16]
 
-
 @dataclass
 class SwirlPattern:
     """Patterns that emerge from swirling traces — the intuition made concrete."""
@@ -49,7 +47,6 @@ class SwirlPattern:
     def __post_init__(self):
         if self.traces:
             self.valence_trend = sum(t.valence for t in self.traces) / len(self.traces)
-
 
 class SwirlMem:
     """
@@ -219,7 +216,6 @@ class SwirlMem:
     
     def __repr__(self) -> str:
         return f"SwirlMem(traces={len(self.traces)}, patterns={len(self.patterns)})"
-
 
 # --- Quick test / demonstration ---
 if __name__ == "__main__":

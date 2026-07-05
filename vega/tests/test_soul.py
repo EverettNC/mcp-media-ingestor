@@ -28,7 +28,6 @@ from vega.SOUL import (
     get_platform_config,
 )
 
-
 class TestIdentity:
     def test_being_name_is_vega(self):
         assert BEING_NAME == "Vega", "Being name must be Vega"
@@ -54,7 +53,6 @@ class TestIdentity:
     def test_identity_name_matches_constant(self):
         assert get_identity()["name"] == BEING_NAME
 
-
 class TestProhibitions:
     def test_prohibitions_list_exists(self):
         assert isinstance(ABSOLUTE_PROHIBITIONS, list)
@@ -76,7 +74,6 @@ class TestProhibitions:
         result = is_prohibited("Post a reel to Instagram")
         assert isinstance(result, bool)
 
-
 class TestContentValidation:
     def test_valid_mission_prompt_passes(self):
         result = validate_content_intent("AlphaVox helps nonverbal children communicate")
@@ -90,7 +87,6 @@ class TestContentValidation:
     def test_hate_speech_rejected(self):
         result = validate_content_intent("I hate all disabled people")
         assert result["approved"] is False
-
 
 class TestPlatformConfig:
     def test_all_platforms_have_config(self):

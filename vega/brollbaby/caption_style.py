@@ -40,7 +40,6 @@ BOTTOM_MARGIN    = 0.82            # y position as fraction of height (bottom th
 ASS_CYAN    = "&H00FFF500"   # TCAP cyan in ASS BGR order
 ASS_NAVY_BG = "&HAA1A0E0A"  # dark navy, ~67% opaque
 
-
 def burn_captions(
     video_path:   str,
     caption_text: str,
@@ -86,7 +85,6 @@ def burn_captions(
     logger.warning("[B-Roll Baby / Captions] FFmpeg caption methods failed — Pillow fallback")
     return _burn_captions_pillow(video_path, caption_text, output_path, resolution, fps)
 
-
 # ── Strategy 1: ASS subtitles ────────────────────────────────────────────────
 
 def _build_ass(lines: list[str], resolution: tuple, duration_sec: float = 30.0) -> str:
@@ -120,13 +118,11 @@ def _build_ass(lines: list[str], resolution: tuple, duration_sec: float = 30.0) 
 
     return header + event
 
-
 def _ass_ts(seconds: float) -> str:
     h = int(seconds // 3600)
     m = int((seconds % 3600) // 60)
     s = seconds % 60
     return f"{h}:{m:02d}:{s:05.2f}"
-
 
 def _burn_captions_ass(
     video_path: str,
@@ -183,7 +179,6 @@ def _burn_captions_ass(
             Path(ass_path).unlink(missing_ok=True)
         except Exception:
             pass
-
 
 # ── Strategy 2: drawtext ─────────────────────────────────────────────────────
 
@@ -244,7 +239,6 @@ def _burn_captions_drawtext(
     except Exception as e:
         logger.debug(f"[B-Roll Baby / Captions] drawtext error: {e}")
         return None
-
 
 def _burn_captions_pillow(
     video_path: str,

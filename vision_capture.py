@@ -67,7 +67,6 @@ def build_ffmpeg_cmd() -> list[str]:
         "-",                   # output to stdout (pipe)
     ]
 
-
 async def stream_frames_to_bridge(ws):
     """Run ffmpeg, parse mjpeg stream into individual JPEGs, send as base64 frames."""
     cmd = build_ffmpeg_cmd()
@@ -124,7 +123,6 @@ async def stream_frames_to_bridge(ws):
             except asyncio.TimeoutError:
                 proc.kill()
 
-
 async def stream_vision_to_bridge():
     """Connect/reconnect loop, feed frames."""
     while True:
@@ -140,14 +138,12 @@ async def stream_vision_to_bridge():
             logger.error(f"Unexpected vision error: {e}. Retrying in 5s...")
             await asyncio.sleep(5)
 
-
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 async def main():
     # Note: first run on mac will trigger camera / screen recording permission prompts
     logger.info(f"Vision source: {SOURCE} | target FPS ~{FPS}")
     await stream_vision_to_bridge()
-
 
 if __name__ == "__main__":
     import websockets  # import here so error is clear if missing

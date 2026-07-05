@@ -18,7 +18,6 @@ import random
 
 logger = logging.getLogger(__name__)
 
-
 class ChristmanMusicStudio:
     """
     CHRISTMAN's music production studio - professional audio creation
@@ -376,10 +375,8 @@ class ChristmanMusicStudio:
             },
         }
 
-
 # Global studio instance
 christman_studio = None
-
 
 def initialize_christman_studio():
     """Initialize CHRISTMAN's music production studio"""
@@ -387,7 +384,6 @@ def initialize_christman_studio():
     christman_studio = ChristmanMusicStudio()
     logger.info("🎛️ CHRISTMAN's music production studio is online!")
     return christman_studio
-
 
 def create_beat(name: str, style: str = "electronic") -> Dict:
     """CHRISTMAN creates a beat"""
@@ -408,7 +404,6 @@ def create_beat(name: str, style: str = "electronic") -> Dict:
     christman_studio.program_beat("Drums", pattern, bars=4)
 
     return christman_studio.mix_project(f"{name}_{style}_beat")
-
 
 if __name__ == "__main__":
     # Test CHRISTMAN's production studio

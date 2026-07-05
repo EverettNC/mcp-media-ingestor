@@ -22,7 +22,6 @@ logger = logging.getLogger(__name__)
 WS_URL = os.getenv("NEXUS_BRIDGE_WS", "ws://localhost:8765/ws/nexus")
 SESSION_ID = os.getenv("NEXUS_SESSION_ID", "nexus_session")
 
-
 def ensure_single_instance():
     """Prevent multiple carbon_bridge_client.py instances from running."""
     lock_file = os.path.expanduser("~/Library/Logs/nexus_bridge_client.lock")
@@ -33,7 +32,6 @@ def ensure_single_instance():
     except BlockingIOError:
         logger.warning("Another nexus_bridge_client instance is already running. Exiting.")
         sys.exit(0)
-
 
 async def connect_nexus_to_bridge():
     """Connect to the bridge and maintain the WebSocket connection."""
@@ -90,12 +88,10 @@ async def connect_nexus_to_bridge():
             logger.error(f"Unexpected error: {e}. Retrying in 10s...")
             await asyncio.sleep(10)
 
-
 async def main():
     ensure_single_instance()
     logger.info("Starting Nexus ↔ Bridge WebSocket client")
     await connect_nexus_to_bridge()
-
 
 if __name__ == "__main__":
     try:

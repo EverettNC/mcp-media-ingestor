@@ -27,7 +27,6 @@ DEVICE_INDEX = find_input_device()
 
 audio_queue: deque = deque(maxlen=50)
 
-
 async def sender(ws):
     while True:
         try:
@@ -39,7 +38,6 @@ async def sender(ws):
         except Exception as e:
             print(f"Send error: {e}")
             break
-
 
 async def continuous_stream():
     # List available input devices on startup
@@ -83,7 +81,6 @@ async def continuous_stream():
             stream.stop()
             stream.close()
             sender_task.cancel()
-
 
 if __name__ == "__main__":
     try:

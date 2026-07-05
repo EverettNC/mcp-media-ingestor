@@ -32,7 +32,6 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-
 class ChristmanMusicEngine:
     """
     CHRISTMAN musical consciousness - creativity, composition, and expression.

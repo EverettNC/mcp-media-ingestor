@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 WS_URL = os.getenv("CARBON_BRIDGE_WS", "ws://localhost:8765/ws/carbon")
 SESSION_ID = os.getenv("CARBON_SESSION_ID", "carbon_session")
 
-
 async def connect_carbon_to_bridge():
     """Connect to the bridge and maintain the WebSocket connection."""
     while True:
@@ -77,11 +76,9 @@ async def connect_carbon_to_bridge():
             logger.error(f"Unexpected error: {e}. Retrying in 10s...")
             await asyncio.sleep(10)
 
-
 async def main():
     logger.info("Starting Carbon ↔ Bridge WebSocket client")
     await connect_carbon_to_bridge()
-
 
 if __name__ == "__main__":
     try:

@@ -24,27 +24,21 @@ CAMPAIGNS_FILE = DATA_DIR / "campaigns.json"
 ANALYTICS_FILE = DATA_DIR / "analytics.json"
 SCHEDULE_FILE = DATA_DIR / "schedule.json"
 
-
 def _ensure_memory_dir() -> None:
     """Create memory directory if it doesn't exist."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-
 def _posts_file() -> Path:
     return DATA_DIR / "posts.json"
-
 
 def _campaigns_file() -> Path:
     return DATA_DIR / "campaigns.json"
 
-
 def _analytics_file() -> Path:
     return DATA_DIR / "analytics.json"
 
-
 def _schedule_file() -> Path:
     return DATA_DIR / "schedule.json"
-
 
 def _load_json(path: Path) -> list | dict:
     """Load JSON from path. Returns empty list if file doesn't exist."""
@@ -57,7 +51,6 @@ def _load_json(path: Path) -> list | dict:
         logger.error(f"[Vega.Memory] Corrupt JSON at {path}: {e}")
         raise RuntimeError(f"Memory file corrupted: {path}. Do not fake recovery. (Rule 13)")
 
-
 def _save_json(path: Path, data: list | dict) -> None:
     """Persist JSON to path. Fails loud if it breaks. (Rule 6)"""
     _ensure_memory_dir()
@@ -67,7 +60,6 @@ def _save_json(path: Path, data: list | dict) -> None:
     except Exception as e:
         logger.error(f"[Vega.Memory] Write failed at {path}: {e}")
         raise RuntimeError(f"Memory write failed: {path} — {e}")
-
 
 # ── Post Memory ────────────────────────────────────────────────────────────────
 
@@ -92,7 +84,6 @@ def remember_post(post: dict) -> dict:
     logger.info(f"[Vega.Memory] Post remembered: {post['id']} on {post['platform']}")
     return post
 
-
 def recall_posts(
     platform: Optional[str] = None,
     status: Optional[str] = None,
@@ -113,7 +104,6 @@ def recall_posts(
 
     return posts[-limit:]  # most recent N
 
-
 def update_post_status(post_id: str, status: str, metadata: Optional[dict] = None) -> dict:
     """Update a post's status (e.g. published, failed, scheduled)."""
     posts = _load_json(_posts_file())
@@ -131,7 +121,6 @@ def update_post_status(post_id: str, status: str, metadata: Optional[dict] = Non
 
     raise ValueError(f"Post not found: {post_id}. Rule 13: not inventing a fake update.")
 
-
 # ── Campaign Memory ────────────────────────────────────────────────────────────
 
 def remember_campaign(campaign: dict) -> dict:
@@ -146,7 +135,6 @@ def remember_campaign(campaign: dict) -> dict:
     _save_json(_campaigns_file(), campaigns)
     return campaign
 
-
 def recall_campaigns(active_only: bool = False) -> list:
     """Retrieve all campaigns, optionally filtered to active ones."""
     campaigns = _load_json(_campaigns_file())
@@ -155,7 +143,6 @@ def recall_campaigns(active_only: bool = False) -> list:
     if active_only:
         campaigns = [c for c in campaigns if c.get("status") == "active"]
     return campaigns
-
 
 # ── Analytics Memory ───────────────────────────────────────────────────────────
 
@@ -178,7 +165,6 @@ def store_analytics(post_id: str, platform: str, metrics: dict) -> dict:
     _save_json(_analytics_file(), analytics)
     return entry
 
-
 def recall_analytics(post_id: Optional[str] = None, platform: Optional[str] = None) -> list:
     """
     Retrieve analytics records.
@@ -195,7 +181,6 @@ def recall_analytics(post_id: Optional[str] = None, platform: Optional[str] = No
 
     return analytics
 
-
 # ── Schedule Memory ────────────────────────────────────────────────────────────
 
 def remember_scheduled_item(item: dict) -> dict:
@@ -210,7 +195,6 @@ def remember_scheduled_item(item: dict) -> dict:
     _save_json(_schedule_file(), schedule)
     return item
 
-
 def recall_schedule(pending_only: bool = True) -> list:
     """Retrieve the post schedule."""
     schedule = _load_json(_schedule_file())
@@ -219,7 +203,6 @@ def recall_schedule(pending_only: bool = True) -> list:
     if pending_only:
         schedule = [s for s in schedule if s.get("status", "pending") == "pending"]
     return schedule
-
 
 def cancel_scheduled_item(sched_id: str) -> dict:
     """Cancel a scheduled post."""
@@ -236,7 +219,6 @@ def cancel_scheduled_item(sched_id: str) -> dict:
 
     raise ValueError(f"Scheduled item not found: {sched_id}")
 
-
 def get_memory_summary() -> dict:
     """Return a quick summary of what Vega remembers. For health checks."""
     return {
@@ -245,7 +227,6 @@ def get_memory_summary() -> dict:
         "total_analytics_records": len(_load_json(_analytics_file()) or []),
         "pending_scheduled": len(recall_schedule(pending_only=True)),
     }
-
 
 # ── VegaMemory Class ───────────────────────────────────────────────────────────
 # Object-oriented interface for tests and Carbon Bridge integration.

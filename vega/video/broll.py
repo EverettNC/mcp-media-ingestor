@@ -25,7 +25,6 @@ VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".m4v", ".mxf", ".prores", "
 # Supported image extensions (for still cutaways)
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".heic", ".raw", ".arw", ".cr2"}
 
-
 def scan_library(
     base_path: Optional[str] = None,
     rebuild_index: bool = False,
@@ -135,7 +134,6 @@ def scan_library(
     )
     return index
 
-
 def find_clips(
     keywords: list[str],
     max_clips: int = 10,
@@ -181,7 +179,6 @@ def find_clips(
         matches = clips[:max_clips]
 
     return matches
-
 
 def get_index_summary() -> dict:
     """

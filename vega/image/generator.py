@@ -32,7 +32,6 @@ logger = logging.getLogger("vega.image.generator")
 OUTPUT_DIR = Path(__file__).parent.parent.parent / "vega_output" / "images"
 ESRGAN_PATH = Path.home() / "Real-ESRGAN" / "inference_realesrgan.py"
 
-
 def generate_8k_image(
     prompt: str,
     output_filename: Optional[str] = None,
@@ -90,7 +89,6 @@ def generate_8k_image(
         ),
         "method": "none",
     }
-
 
 def _generate_via_branded_card(
     prompt: str,
@@ -156,7 +154,6 @@ def _generate_via_branded_card(
         "file_size_mb": round(file_size_mb, 2),
     }
 
-
 def _generate_via_replicate(prompt: str, negative_prompt: str, output_filename: str) -> dict:
     """Generate via Replicate API (SDXL). Rule 13: real API or honest error."""
     try:
@@ -185,7 +182,6 @@ def _generate_via_replicate(prompt: str, negative_prompt: str, output_filename: 
     except Exception as e:
         return {"status": "error", "reason": str(e)}
 
-
 def _generate_via_dalle(prompt: str, output_filename: str) -> dict:
     """Generate via OpenAI DALL-E 3. Rule 13: real API or honest error."""
     try:
@@ -209,7 +205,6 @@ def _generate_via_dalle(prompt: str, output_filename: str) -> dict:
     except Exception as e:
         return {"status": "error", "reason": str(e)}
 
-
 def _check_comfyui() -> bool:
     """Check if ComfyUI is running on localhost:8188."""
     try:
@@ -218,7 +213,6 @@ def _check_comfyui() -> bool:
         return True
     except Exception:
         return False
-
 
 def _generate_via_comfyui(prompt: str, negative_prompt: str, output_filename: str) -> dict:
     """
@@ -257,7 +251,6 @@ def _generate_via_comfyui(prompt: str, negative_prompt: str, output_filename: st
         raise
     except Exception as e:
         return {"status": "error", "reason": f"ComfyUI error: {e}"}
-
 
 def _upscale_to_8k(input_path: str, output_filename: str, target_resolution: tuple) -> dict:
     """

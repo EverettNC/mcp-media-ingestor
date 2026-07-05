@@ -18,7 +18,6 @@ from typing import Optional
 
 logger = logging.getLogger("vega.scheduler")
 
-
 def _get_scheduler():
     """Lazy-import APScheduler so we don't crash if it isn't installed yet."""
     try:
@@ -31,7 +30,6 @@ def _get_scheduler():
             "[Vega.Scheduler] APScheduler not installed. "
             "Run: pip install apscheduler>=3.10.0  (Rule 1: it has to work)"
         )
-
 
 class VegaScheduler:
     """

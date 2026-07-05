@@ -105,7 +105,6 @@ _STOP = frozenset({
     "like", "people", "person", "project", "system", "ai", "world",
 })
 
-
 def extract_keywords(prompt: str, max_keywords: int = 15) -> List[str]:
     """
     TCAP-aware keyword extraction from a video prompt.

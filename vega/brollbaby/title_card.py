@@ -33,14 +33,12 @@ AMBER  = "0xFFB800"
 CARD_DURATION = 3     # seconds
 FADE_DURATION = 0.4   # fade in/out
 
-
 def _ffmpeg_available() -> bool:
     try:
         r = subprocess.run(["ffmpeg", "-version"], capture_output=True, timeout=5)
         return r.returncode == 0
     except Exception:
         return False
-
 
 def build_title_card(
     title:       str,
@@ -181,7 +179,6 @@ def build_title_card(
         logger.error(f"[B-Roll Baby / TitleCard] Unexpected error: {e}")
         return None
 
-
 def _build_title_card_pillow(
     title: str,
     subtitle: str,
@@ -199,7 +196,6 @@ def _build_title_card_pillow(
     if result:
         logger.info(f"[B-Roll Baby / TitleCard] ✅ Pillow card built: {output_path}")
     return result
-
 
 def prepend_card_to_video(
     card_path:   str,

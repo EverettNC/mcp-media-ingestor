@@ -12,7 +12,6 @@ SAMPLE_RATE = 16000
 CHANNELS = 1
 DTYPE = "int16"
 
-
 def listen(max_duration: float = 6.0) -> str:
     """
     Record up to max_duration seconds from the default mic.

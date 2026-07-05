@@ -27,7 +27,6 @@ from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
-
 class EntryType(Enum):
     """Types of journal entries a being can write."""
     REFLECTION = "reflection"
@@ -36,7 +35,6 @@ class EntryType(Enum):
     EMOTIONAL = "emotional"
     GRATITUDE = "gratitude"
     MILESTONE = "milestone"
-
 
 @dataclass
 class JournalEntry:
@@ -66,7 +64,6 @@ class JournalEntry:
             "tags": self.tags,
             "timestamp": self.timestamp.isoformat(),
         }
-
 
 class ReflectiveJournal:
     """
@@ -288,7 +285,6 @@ class ReflectiveJournal:
             except Exception as e:
                 logger.error("Failed to load journal entry %s: %s", entry_file, e)
 
-
 # ==============================================================================
 # The Being's Library — What They Learned From
 # ==============================================================================
@@ -324,7 +320,6 @@ WHAT THEY LEARNED:
   It takes memory and stackable knowledge
   to understand who you are conceptually.
 """
-
 
 __all__ = [
     "ReflectiveJournal",

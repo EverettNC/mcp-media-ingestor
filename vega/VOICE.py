@@ -66,7 +66,6 @@ HASHTAG_SETS = {
     ],
 }
 
-
 def write_caption(
     prompt: str,
     platform: str,
@@ -130,7 +129,6 @@ def write_caption(
         "tone": tone,
     }
 
-
 def format_analytics_copy(metrics: dict, platform: str) -> str:
     """
     Format analytics data into human-readable copy for reports.
@@ -158,7 +156,6 @@ def format_analytics_copy(metrics: dict, platform: str) -> str:
     lines.append(f"Engagement Rate: {engagement_rate:.2f}%")
 
     return "\n".join(lines)
-
 
 def get_tone_register(context: str) -> str:
     """

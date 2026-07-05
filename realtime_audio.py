@@ -111,7 +111,6 @@ async def get_latest():
         return {"text": "", "message": "No transcript yet — speak into the mic."}
     return latest_transcript
 
-
 # For testing / integration with MCP
 @app.get("/health")
 async def health():

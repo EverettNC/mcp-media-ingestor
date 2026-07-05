@@ -24,7 +24,6 @@ from mcp.types import ImageContent
 
 mcp = FastMCP("mcp-media-ingestor")
 
-
 def check_ffmpeg():
     if not shutil.which("ffmpeg"):
         raise RuntimeError(
@@ -33,7 +32,6 @@ def check_ffmpeg():
         )
 
 check_ffmpeg()
-
 
 def check_faster_whisper():
     try:
@@ -44,7 +42,6 @@ def check_faster_whisper():
             "Run: pip install faster-whisper --break-system-packages"
         )
 
-
 def make_image_content(pil_img: PILImage.Image, fmt: str = "JPEG") -> ImageContent:
     pil_img.thumbnail((2000, 2000))
     buffer = io.BytesIO()
@@ -52,7 +49,6 @@ def make_image_content(pil_img: PILImage.Image, fmt: str = "JPEG") -> ImageConte
     b64 = base64.standard_b64encode(buffer.getvalue()).decode("utf-8")
     mime = "image/jpeg" if fmt.upper() == "JPEG" else f"image/{fmt.lower()}"
     return ImageContent(type="image", data=b64, mimeType=mime)
-
 
 @mcp.tool()
 def read_image(file_path: str) -> ImageContent:
@@ -68,7 +64,6 @@ def read_image(file_path: str) -> ImageContent:
             return make_image_content(img, fmt)
     except Exception as e:
         raise RuntimeError(f"Ingestion failed: {e}")
-
 
 @mcp.tool()
 def get_video_metadata(video_path: str) -> str:
@@ -89,7 +84,6 @@ def get_video_metadata(video_path: str) -> str:
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"ffprobe failed: {e.stderr}")
-
 
 @mcp.tool()
 def extract_video_frames(video_path: str, interval_seconds: float = 5.0) -> list[ImageContent]:
@@ -132,7 +126,6 @@ def extract_video_frames(video_path: str, interval_seconds: float = 5.0) -> list
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
 
-
 @mcp.tool()
 def transcribe_audio(file_path: str, model_size: str = "base") -> str:
     """
@@ -170,7 +163,6 @@ def transcribe_audio(file_path: str, model_size: str = "base") -> str:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
 
-
 @mcp.tool()
 def describe_audio_bridge() -> str:
     """
@@ -185,7 +177,6 @@ def describe_audio_bridge() -> str:
     except Exception as e:
         return f"Error checking audio bridge: {e}"
 
-
 @mcp.tool()
 def get_latest_transcript() -> str:
     """
@@ -199,7 +190,6 @@ def get_latest_transcript() -> str:
         return f"No transcript available — bridge not reachable: {e.reason}"
     except Exception as e:
         return f"Error fetching transcript: {e}"
-
 
 @mcp.tool()
 def get_riley_message() -> str:
@@ -220,7 +210,6 @@ def get_riley_message() -> str:
         return f"Riley tunnel not reachable: {e.reason}"
     except Exception as e:
         return f"Error reading Riley's message: {e}"
-
 
 @mcp.tool()
 def send_to_riley(text: str) -> str:
@@ -244,7 +233,6 @@ def send_to_riley(text: str) -> str:
     except Exception as e:
         return f"Error sending to Riley: {e}"
 
-
 @mcp.tool()
 def riley_status() -> str:
     """
@@ -258,13 +246,11 @@ def riley_status() -> str:
     except Exception as e:
         return f"Error checking Riley status: {e}"
 
-
 # ── Total Vision proxies (live camera/screen via the sensory bridge) ──────────
 def make_image_content_from_b64(b64: str, fmt: str = "JPEG") -> ImageContent:
     """Lightweight helper for proxy path (keeps server.py self-contained for live vision)."""
     mime = "image/jpeg" if fmt.upper() == "JPEG" else f"image/{fmt.lower()}"
     return ImageContent(type="image", data=b64, mimeType=mime)
-
 
 @mcp.tool()
 def get_current_view() -> ImageContent:
@@ -286,7 +272,6 @@ def get_current_view() -> ImageContent:
         raise RuntimeError(f"Vision bridge not reachable on 8765: {e.reason}")
     except Exception as e:
         raise RuntimeError(f"Error fetching live view: {e}")
-
 
 if __name__ == "__main__":
     mcp.run()

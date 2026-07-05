@@ -58,7 +58,6 @@ PLATFORM_RESOLUTION: dict[str, tuple] = {
     "x":          (1280, 720),
 }
 
-
 @contextmanager
 def _cve_working_dir():
     """
@@ -72,7 +71,6 @@ def _cve_working_dir():
         yield
     finally:
         os.chdir(original)
-
 
 def _get_cve():
     """
@@ -89,10 +87,8 @@ def _get_cve():
         logger.warning(f"[Vega.VideoGen] ChristmanVideoEngine not available: {e}")
         return None
 
-
 def _platform_resolution(platform: str) -> tuple:
     return PLATFORM_RESOLUTION.get(platform.lower(), (1920, 1080))
-
 
 def _being_from_prompt(prompt: str) -> str:
     """Extract the primary being name from the prompt for the title card."""
@@ -105,7 +101,6 @@ def _being_from_prompt(prompt: str) -> str:
         if b.lower() in prompt_lower:
             return b
     return "The Christman AI Project"
-
 
 def _add_voiceover(
     video_path: str,
@@ -173,7 +168,6 @@ def _add_voiceover(
     except Exception as e:
         logger.warning(f"[Vega.VideoGen] Voiceover mix error: {e}")
         return video_path
-
 
 def generate_from_prompt(
     prompt:            str,

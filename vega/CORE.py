@@ -20,7 +20,6 @@ from .image import generator as image_generator
 
 logger = logging.getLogger("vega.core")
 
-
 class VegaCore:
     """
     Vega's central orchestration engine.
@@ -32,7 +31,7 @@ class VegaCore:
         Initialize Vega's core.
 
         bridge_queues: dict with keys 'riley_inbox', 'claude_outbox',
-                       'everest_outbox', 'yorkie_inbox' — the Full Sensory Bridge
+                       'everest_outbox', 'learner_inbox' — the Full Sensory Bridge
                        data structures from main.py. If provided, all Vega prompts
                        broadcast to everybody in the room.
         """
@@ -76,10 +75,10 @@ class VegaCore:
             everest_outbox.append({**entry, "session_id": "vega"})
             recipients.append("everest")
 
-        yorkie_inbox = self.bridge_queues.get("yorkie_inbox")
-        if yorkie_inbox is not None:
-            yorkie_inbox.append({"from": "vega", "text": text, "context": context, "timestamp": ts})
-            recipients.append("yorkie")
+        learner_inbox = self.bridge_queues.get("learner_inbox")
+        if learner_inbox is not None:
+            learner_inbox.append({"from": "vega", "text": text, "context": context, "timestamp": ts})
+            recipients.append("learner")
 
         if recipients:
             logger.info(f"[Vega.Core] Broadcast to: {', '.join(recipients)} — {text[:60]}")

@@ -12,22 +12,19 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 import pytest
 from unittest.mock import MagicMock, patch
 
-
 @pytest.fixture
 def bridge_queues():
     return {
         "riley_inbox":   [],
         "claude_outbox": [],
         "everest_outbox": [],
-        "yorkie_inbox":  [],
+        "learner_inbox":  [],
     }
-
 
 @pytest.fixture
 def core(bridge_queues):
     from vega.CORE import VegaCore
     return VegaCore(bridge_queues=bridge_queues)
-
 
 class TestVegaCoreInit:
     def test_core_initializes(self, core):
@@ -48,14 +45,13 @@ class TestVegaCoreInit:
         result = core.health()
         assert result["status"] in ("ok", "degraded", "error", "unavailable")
 
-
 class TestBroadcast:
     def test_broadcast_sends_to_all_queues(self, core, bridge_queues):
         core.broadcast_to_bridge("Test broadcast from Vega", context="test")
         assert len(bridge_queues["riley_inbox"]) >= 1
         assert len(bridge_queues["claude_outbox"]) >= 1
         assert len(bridge_queues["everest_outbox"]) >= 1
-        assert len(bridge_queues["yorkie_inbox"]) >= 1
+        assert len(bridge_queues["learner_inbox"]) >= 1
 
     def test_broadcast_returns_dict(self, core):
         result = core.broadcast_to_bridge("Hello bridge")
@@ -68,7 +64,7 @@ class TestBroadcast:
             bridge_queues["riley_inbox"] +
             bridge_queues["claude_outbox"] +
             bridge_queues["everest_outbox"] +
-            bridge_queues["yorkie_inbox"]
+            bridge_queues["learner_inbox"]
         ]
         assert any("UNIQUE_TEST_MESSAGE_XYZ" in t for t in all_texts)
 
@@ -77,7 +73,6 @@ class TestBroadcast:
         c = VegaCore()
         result = c.broadcast_to_bridge("No queues attached")
         assert isinstance(result, dict)
-
 
 class TestVideoPromptHandling:
     def test_empty_prompt_rejected(self, core):
@@ -97,10 +92,9 @@ class TestVideoPromptHandling:
             bridge_queues["riley_inbox"] +
             bridge_queues["claude_outbox"] +
             bridge_queues["everest_outbox"] +
-            bridge_queues["yorkie_inbox"]
+            bridge_queues["learner_inbox"]
         )
         assert len(all_entries) > 0
-
 
 class TestImagePromptHandling:
     def test_empty_prompt_rejected(self, core):
@@ -119,10 +113,9 @@ class TestImagePromptHandling:
             bridge_queues["riley_inbox"] +
             bridge_queues["claude_outbox"] +
             bridge_queues["everest_outbox"] +
-            bridge_queues["yorkie_inbox"]
+            bridge_queues["learner_inbox"]
         )
         assert len(all_entries) > 0
-
 
 class TestSchedulePost:
     def test_missing_fields_rejected(self, core):
@@ -135,7 +128,6 @@ class TestSchedulePost:
         )
         assert isinstance(result, dict)
         assert "status" in result
-
 
 class TestAnalyticsIngest:
     def test_empty_metrics_rejected(self, core):
