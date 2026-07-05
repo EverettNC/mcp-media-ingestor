@@ -1,0 +1,25 @@
+CLEANUP AUDIT LOG — 2026-07-05 (Cochlea / mcp-media-ingestor)
+Operator: Claude Code (Fable 5), directed by Everett N. Christman
+Per Cardinal Rule #5: every change to file tracking or location is listed below.
+NO files were deleted or moved on disk — this is git index hygiene only.
+
+== UNTRACKED FROM GIT (git rm --cached; every file remains on disk) ==
+__pycache__/*.pyc          6 compiled bytecode files (regenerated on every run)
+logs/bridge.log            41 MB runtime log
+logs/mic.log               runtime log
+vega_output/video/*.mp4    36 generated social-media renders (~700 MB working set)
+Reason: generated artifacts; .gitignore already banned __pycache__/, logs/, *.log
+        but these were committed before those rules existed. vega_output/ was
+        never ignored — rule added now.
+Rollback: git checkout HEAD~1 -- <path>  (or git add the on-disk files again)
+
+== .gitignore ADDITIONS ==
+python@3.12/    embedded runtime (untracked today; rule prevents accidental add)
+vega_output/    generated media renders
+
+== DELIBERATELY LEFT TRACKED ==
+AlphaVox_Demo_June9.mp4    24 MB named demo asset at repo root — looks intentional;
+                           flag to Everett if it should go too.
+
+== NOT TOUCHED ON DISK ==
+Everything. No file was moved, deleted, or rewritten outside .gitignore.
