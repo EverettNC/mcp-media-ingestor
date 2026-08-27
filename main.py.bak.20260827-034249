@@ -82,17 +82,6 @@ WHISPER_MODEL_NAME = os.getenv("WHISPER_MODEL", "medium")
 WHISPER_DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
 WHISPER_COMPUTE = os.getenv("WHISPER_COMPUTE", "int8")
 
-# Proper nouns Whisper does not know and will substitute phonetically if left
-# to guess ("Anthropic" -> "Antarctic"). hotwords biases the decoder toward
-# these without consuming the prompt window and without a latency cost — which
-# matters because this runs `medium` at int8 on CPU for a live loop.
-CHRISTMAN_VOCAB = (
-    "Anthropic, Claude, Nebius, NVIDIA, Nemotron, Ollama, Kimi, "
-    "Christman, TCAP, BROCKSTON, Nexus, AlphaVox, AlphaWolf, AlphaDen, "
-    "OmegaAlpha, Inferno, Sierra, Aegis, Virtus, Derek, Riley, Smooches, "
-    "Corti, Lucent, Grok, Misty, Everett, Luma Cognify"
-)
-
 def _load_whisper() -> None:
     global _whisper_model, _whisper_loading, _whisper_ready, _whisper_error, _whisper_started_at
     with _whisper_lock:
@@ -265,8 +254,7 @@ class AudioStreamProcessor:
         # Run Whisper in a thread so it doesn't block the event loop.
         def _run_whisper():
             segs, inf = _whisper_model.transcribe(
-                audio_np, beam_size=5, vad_filter=True, language="en",
-                word_timestamps=True, hotwords=CHRISTMAN_VOCAB
+                audio_np, beam_size=5, vad_filter=True, language="en", word_timestamps=True
             )
             return list(segs), inf
 

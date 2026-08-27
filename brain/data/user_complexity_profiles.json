@@ -1,0 +1,29 @@
+{
+  "default_user": {
+    "complexity_level": 3,
+    "adaptation_mode": "adaptive",
+    "interaction_history": [],
+    "topic_complexities": {},
+    "last_update": "2025-05-04T00:49:03.932141",
+    "progression_factor": 0.1,
+    "complexity_variance": 0.5
+  },
+  "1": {
+    "complexity_level": 3,
+    "adaptation_mode": "adaptive",
+    "interaction_history": [],
+    "topic_complexities": {},
+    "last_update": "2025-05-04T00:49:04.326058",
+    "progression_factor": 0.1,
+    "complexity_variance": 0.5
+  },
+  "1": {
+    "complexity_level": 3,
+    "adaptation_mode": "adaptive",
+    "interaction_history": [],
+    "topic_complexities": {},
+    "last_update": "2025-05-13T23:05:44.405794",
+    "progression_factor": 0.1,
+    "complexity_variance": 0.5
+  }
+}

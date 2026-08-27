@@ -37,35 +37,111 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ── Config ────────────────────────────────────────────────────────────────────
-WS_URL = "ws://localhost:8765/ws/video"
+WS_URL = os.getenv("VISION_WS_URL", "ws://localhost:8765/ws/video")
 FPS = float(os.getenv("FPS", "2.0"))          # low rate to protect context / bandwidth
 SOURCE = os.getenv("SOURCE", sys.argv[1] if len(sys.argv) > 1 else "webcam")
+# Override with VIDEO_INPUT=... if needed; else auto-detect below
+_VIDEO_INPUT_ENV = os.getenv("VIDEO_INPUT", "").strip()
 
-# macOS avfoundation device selection (adjust for your machine)
-# "0" = first video input (usually FaceTime / webcam)
-# "1" or "1:none" often screen / capture card
-if SOURCE.lower() in ("screen", "desktop", "capture"):
-    VIDEO_INPUT = "1:none"   # common for screen on mac
-    RESOLUTION = os.getenv("RES", "1280x720")
-else:
-    VIDEO_INPUT = "0"        # webcam
-    RESOLUTION = os.getenv("RES", "640x480")
+
+def _list_avfoundation_video_devices() -> list[tuple[int, str]]:
+    """Parse `ffmpeg -f avfoundation -list_devices` → [(index, name), ...]."""
+    try:
+        r = subprocess.run(
+            ["ffmpeg", "-f", "avfoundation", "-list_devices", "true", "-i", ""],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        text = (r.stderr or "") + (r.stdout or "")
+    except Exception as exc:
+        logger.warning("Could not list avfoundation devices: %s", exc)
+        return []
+    devices: list[tuple[int, str]] = []
+    in_video = False
+    for line in text.splitlines():
+        if "AVFoundation video devices" in line:
+            in_video = True
+            continue
+        if "AVFoundation audio devices" in line:
+            break
+        if not in_video:
+            continue
+        # e.g. [5] Capture screen 0
+        if "] " in line and "[" in line:
+            try:
+                bracket = line[line.rfind("[") + 1 : line.rfind("]")]
+                idx = int(bracket)
+                name = line.split("]", 1)[-1].strip()
+                devices.append((idx, name))
+            except ValueError:
+                continue
+    return devices
+
+
+def resolve_video_input(source: str) -> tuple[str, str]:
+    """
+    Return (ffmpeg -i value, resolution).
+    Screen on this Mac is often index 5+ ("Capture screen 0"), NOT 1.
+    Webcam is usually index 0 (FaceTime).
+    """
+    if _VIDEO_INPUT_ENV:
+        res = os.getenv("RES", "1280x720" if source.lower() in ("screen", "desktop", "capture") else "640x480")
+        return _VIDEO_INPUT_ENV, res
+
+    devices = _list_avfoundation_video_devices()
+    src = source.lower().strip()
+
+    if src in ("screen", "desktop", "capture"):
+        # Prefer "Capture screen 0" (main display)
+        for idx, name in devices:
+            if "capture screen 0" in name.lower():
+                logger.info("Auto screen device [%s] %s", idx, name)
+                return f"{idx}:none", os.getenv("RES", "1280x720")
+        for idx, name in devices:
+            if "capture screen" in name.lower():
+                logger.info("Auto screen device [%s] %s", idx, name)
+                return f"{idx}:none", os.getenv("RES", "1280x720")
+        # Last resort names work as avfoundation inputs on recent ffmpeg
+        logger.warning("No Capture screen in device list — trying name 'Capture screen 0'")
+        return "Capture screen 0:none", os.getenv("RES", "1280x720")
+
+    # Webcam / camera: FaceTime first, else first non-screen device
+    for idx, name in devices:
+        if "facetime" in name.lower() or "built-in" in name.lower():
+            logger.info("Auto webcam device [%s] %s", idx, name)
+            return str(idx), os.getenv("RES", "640x480")
+    for idx, name in devices:
+        if "capture screen" not in name.lower() and "iphone" not in name.lower():
+            logger.info("Auto camera device [%s] %s", idx, name)
+            return str(idx), os.getenv("RES", "640x480")
+    return "0", os.getenv("RES", "640x480")
+
+
+VIDEO_INPUT, RESOLUTION = resolve_video_input(SOURCE)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def build_ffmpeg_cmd() -> list[str]:
     """Build ffmpeg command for mjpeg pipe. Works on macOS; adapt for linux/windows."""
     # -f avfoundation on mac. For other OS use v4l2 / dshow etc.
-    return [
+    # Do not force -video_size for Capture screen (can fail); optional via FORCE_VIDEO_SIZE=1
+    cmd = [
         "ffmpeg",
         "-f", "avfoundation",
         "-framerate", str(FPS),
-        "-video_size", RESOLUTION,
-        "-i", VIDEO_INPUT,
-        "-f", "mjpeg",
-        "-q:v", "7",           # quality (lower number = better, ~5-8 reasonable)
-        "-",                   # output to stdout (pipe)
     ]
+    if os.getenv("FORCE_VIDEO_SIZE", "").strip() in ("1", "true", "yes"):
+        cmd.extend(["-video_size", RESOLUTION])
+    cmd.extend(
+        [
+            "-i", VIDEO_INPUT,
+            "-f", "mjpeg",
+            "-q:v", "7",
+            "-",
+        ]
+    )
+    return cmd
 
 async def stream_frames_to_bridge(ws):
     """Run ffmpeg, parse mjpeg stream into individual JPEGs, send as base64 frames."""
@@ -75,7 +151,7 @@ async def stream_frames_to_bridge(ws):
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
     )
 
     assert proc.stdout is not None
@@ -83,10 +159,23 @@ async def stream_frames_to_bridge(ws):
     SOI = b"\xff\xd8"  # JPEG start
     EOI = b"\xff\xd9"  # JPEG end
 
+    frames_sent = 0
     try:
         while True:
             chunk = await proc.stdout.read(4096)
             if not chunk:
+                # ffmpeg exited — surface stderr so we know why (permissions / bad device)
+                err = b""
+                if proc.stderr is not None:
+                    try:
+                        err = await asyncio.wait_for(proc.stderr.read(4000), timeout=1.0)
+                    except Exception:
+                        pass
+                logger.error(
+                    "ffmpeg ended (frames_sent=%s) stderr=%s",
+                    frames_sent,
+                    (err or b"").decode("utf-8", errors="replace")[-500:],
+                )
                 break
             buffer.extend(chunk)
 
@@ -112,9 +201,11 @@ async def stream_frames_to_bridge(ws):
                     "image": b64,
                     "source": SOURCE,
                     "timestamp": asyncio.get_event_loop().time(),
-                    # width/height unknown without decode; bridge/client can omit or add later
                 }
                 await ws.send(json.dumps(payload))
+                frames_sent += 1
+                if frames_sent == 1 or frames_sent % 30 == 0:
+                    logger.info("Vision frames sent: %s (%d KB)", frames_sent, len(jpeg) // 1024)
     finally:
         if proc.returncode is None:
             proc.terminate()

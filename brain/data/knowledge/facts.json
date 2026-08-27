@@ -1,0 +1,46 @@
+[
+  {
+    "text": "Nonverbal communication accounts for approximately 93% of communication meaning, with 55% through body language and 38% through tone of voice.",
+    "source": "initial_data",
+    "topics": [
+      "nonverbal communication"
+    ],
+    "confidence": 0.9,
+    "metadata": {
+      "starter_fact": true
+    },
+    "learned_at": "2025-04-19T12:06:16.319034",
+    "times_accessed": 0,
+    "last_accessed": null
+  },
+  {
+    "text": "Eye contact patterns vary significantly across cultures. In many Asian cultures, extended eye contact can be seen as disrespectful, while in Western cultures it often conveys trustworthiness.",
+    "source": "initial_data",
+    "topics": [
+      "eye contact interpretation",
+      "nonverbal communication"
+    ],
+    "confidence": 0.9,
+    "metadata": {
+      "starter_fact": true
+    },
+    "learned_at": "2025-04-19T12:06:16.319045",
+    "times_accessed": 0,
+    "last_accessed": null
+  },
+  {
+    "text": "AAC (Augmentative and Alternative Communication) systems can use eye tracking technology to allow individuals to control communication devices using only eye movements.",
+    "source": "initial_data",
+    "topics": [
+      "augmentative and alternative communication",
+      "assistive technology tools"
+    ],
+    "confidence": 0.9,
+    "metadata": {
+      "starter_fact": true
+    },
+    "learned_at": "2025-04-19T12:06:16.319048",
+    "times_accessed": 0,
+    "last_accessed": null
+  }
+]

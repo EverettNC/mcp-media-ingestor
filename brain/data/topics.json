@@ -1,0 +1,28 @@
+[
+  {
+    "name": "PECS",
+    "description": "Picture Exchange Communication System",
+    "difficulty": "beginner",
+    "prerequisites": []
+  },
+  {
+    "name": "AAC",
+    "description": "Augmentative and Alternative Communication",
+    "difficulty": "intermediate",
+    "prerequisites": [
+      "PECS"
+    ]
+  },
+  {
+    "name": "Social Interaction",
+    "description": "Engaging with others socially",
+    "difficulty": "intermediate",
+    "prerequisites": []
+  },
+  {
+    "name": "Sensory Regulation",
+    "description": "Managing sensory inputs",
+    "difficulty": "beginner",
+    "prerequisites": []
+  }
+]

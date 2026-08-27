@@ -1,0 +1,38 @@
+[
+  {
+    "id": 1,
+    "timestamp": "2025-05-05T10:09:13.624709",
+    "event_type": "topic_explored",
+    "user_id": 1,
+    "details": {
+      "topic": "PECS"
+    }
+  },
+  {
+    "id": 2,
+    "timestamp": "2025-05-05T10:09:20.100517",
+    "event_type": "topic_explored",
+    "user_id": 1,
+    "details": {
+      "topic": "AAC"
+    }
+  },
+  {
+    "id": 3,
+    "timestamp": "2025-05-05T10:09:25.679602",
+    "event_type": "topic_explored",
+    "user_id": 1,
+    "details": {
+      "topic": "Social Interaction"
+    }
+  },
+  {
+    "id": 4,
+    "timestamp": "2025-05-05T10:10:26.377182",
+    "event_type": "topic_explored",
+    "user_id": 1,
+    "details": {
+      "topic": "Sensory Regulation"
+    }
+  }
+]

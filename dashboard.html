@@ -874,9 +874,9 @@
         <span class="ide-subtitle">Carbon–Silicon Code Space</span>
       </div>
       <div class="ide-header-right">
-        <select id="ide-instance" class="ide-select">
-          <option value="brockston">⚡ Brockston</option>
-          <option value="claude" selected>🧠 Claude</option>
+        <select id="ide-instance" class="ide-select" onchange="ideOnInstanceChange()">
+          <option value="brockston" selected>⚡ Brockston</option>
+          <option value="claude">🧠 Claude</option>
           <option value="gpt4">🤖 GPT-4</option>
         </select>
         <select id="ide-language" class="ide-select">
@@ -905,9 +905,9 @@
 
       <!-- Output pane -->
       <div class="ide-output-pane">
-        <div class="ide-pane-label">OUTPUT <span id="ide-instance-badge" class="ide-badge">CLAUDE</span></div>
+        <div class="ide-pane-label">OUTPUT <span id="ide-instance-badge" class="ide-badge">BROCKSTON</span></div>
         <div id="ide-output" class="ide-output">
-          <div class="ide-output-line muted">Christman IDE ready. Pick an instance and go.</div>
+          <div class="ide-output-line muted">Christman IDE ready. Brockston on :9001 via GENERATE.</div>
         </div>
       </div>
     </div>
@@ -1327,11 +1327,22 @@
   pollVision();
 
   // ── IDE Functions ──
+  function ideOnInstanceChange() {
+    var instance = document.getElementById('ide-instance').value;
+    var badge = document.getElementById('ide-instance-badge');
+    if (badge) badge.textContent = instance.toUpperCase();
+  }
+
   function ideLog(msg, cls) {
     cls = cls || '';
     var out = document.getElementById('ide-output');
     var line = document.createElement('div');
     line.className = 'ide-output-line ' + cls;
+    // Preserve newlines in multi-line / code responses
+    line.style.whiteSpace = 'pre-wrap';
+    line.style.fontFamily = (cls === 'success' || cls === 'info')
+      ? 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
+      : '';
     line.textContent = msg;
     out.appendChild(line);
     out.scrollTop = out.scrollHeight;

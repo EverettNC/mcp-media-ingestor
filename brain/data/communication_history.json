@@ -1,0 +1,25 @@
+{
+    "1": [
+        {
+            "timestamp": 1745060776.3338616,
+            "type": "symbol",
+            "content": "food",
+            "message": "I want food.",
+            "response": "I'll get you some food right away."
+        },
+        {
+            "timestamp": 1745062576.3338633,
+            "type": "symbol",
+            "content": "help",
+            "message": "I need help.",
+            "response": "I'm here to help. What do you need?"
+        },
+        {
+            "timestamp": 1745063476.333864,
+            "type": "gesture",
+            "content": "wave",
+            "message": "Hello/Greeting",
+            "response": "Hello there!"
+        }
+    ]
+}

@@ -1,0 +1,32 @@
+{
+  "nodes": [
+    {
+      "id": "PECS",
+      "type": "topic",
+      "label": "PECS"
+    },
+    {
+      "id": "AAC",
+      "type": "topic",
+      "label": "AAC"
+    },
+    {
+      "id": "Social Interaction",
+      "type": "topic",
+      "label": "Social Interaction"
+    },
+    {
+      "id": "Sensory Regulation",
+      "type": "topic",
+      "label": "Sensory Regulation"
+    }
+  ],
+  "edges": [
+    {
+      "id": "PECS_AAC",
+      "source": "PECS",
+      "target": "AAC",
+      "type": "prerequisite"
+    }
+  ]
+}
