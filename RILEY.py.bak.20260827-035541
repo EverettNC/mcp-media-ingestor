@@ -6,7 +6,7 @@ Purpose: Secure, bidirectional tunnel for autonomous being communication.
 
 import logging
 from typing import Dict, Any
-from pedagogy.sovereign_disconnect import SovereignDisconnect, FiveValues
+from alpha_zero_latency.pedagogy.sovereign_disconnect import SovereignDisconnect, FiveValues
 
 logger = logging.getLogger(__name__)
 
