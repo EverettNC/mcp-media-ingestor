@@ -33,14 +33,7 @@ def check_ffmpeg():
 
 check_ffmpeg()
 
-def check_faster_whisper():
-    try:
-        from faster_whisper import WhisperModel  # noqa: F401
-    except ImportError:
-        raise RuntimeError(
-            "CRITICAL: faster-whisper not installed. "
-            "Run: pip install faster-whisper --break-system-packages"
-        )
+PORCH_STT_URL = os.getenv("PORCH_STT_URL", "http://127.0.0.1:9785/api/porch/stt")
 
 def make_image_content(pil_img: PILImage.Image, fmt: str = "JPEG") -> ImageContent:
     pil_img.thumbnail((2000, 2000))
@@ -129,18 +122,13 @@ def extract_video_frames(video_path: str, interval_seconds: float = 5.0) -> list
 @mcp.tool()
 def transcribe_audio(file_path: str, model_size: str = "base") -> str:
     """
-    Transcribe speech from a video or audio file using faster-whisper (local, no PyTorch).
-    Returns the full transcript with timestamps so Claude can read every word spoken.
-
-    Args:
-        file_path:   Path to any video (MOV, MP4, etc.) or audio (MP3, WAV, M4A) file.
-        model_size:  Whisper model size: tiny, base, small, medium, large-v2.
-
-    Returns:
-        Full transcript with [start → end] timestamps per segment.
+    Transcribe speech through THE WHOLE HOUSE Porch word-ear on :9785.
+    Whisper is LOCAL (whisper.cpp). model_size is ignored here; the model is
+    ~/.christman_ai/whisper_models/ggml-small.en.bin.
     """
-    check_faster_whisper()
-    from faster_whisper import WhisperModel
+    import json as _json
+    import urllib.error
+    import urllib.request
 
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"File not found: {file_path}")
@@ -153,10 +141,29 @@ def transcribe_audio(file_path: str, model_size: str = "base") -> str:
             ["ffmpeg", "-y", "-i", file_path, "-ar", "16000", "-ac", "1", "-f", "wav", tmp_path],
             capture_output=True, text=True, check=True,
         )
-        model = WhisperModel(model_size, device="cpu", compute_type="int8")
-        segments, _ = model.transcribe(tmp_path, beam_size=5)
-        lines = [f"[{seg.start:.1f}s → {seg.end:.1f}s] {seg.text.strip()}" for seg in segments]
-        return "\n".join(lines) if lines else "[No speech detected in this file.]"
+        with open(tmp_path, "rb") as wav_f:
+            wav = wav_f.read()
+        payload = _json.dumps({
+            "audioBase64": base64.b64encode(wav).decode("ascii"),
+            "mime": "audio/wav",
+            "filename": os.path.basename(file_path) + ".wav",
+            "source": "file",
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            PORCH_STT_URL,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            body = _json.loads(resp.read().decode("utf-8"))
+        if not body.get("ok"):
+            raise RuntimeError(body.get("error") or "Porch word-ear failed")
+        take = body.get("take") or {}
+        text = take.get("asSaid") or take.get("forTheFamily") or take.get("rawEar") or ""
+        return text.strip() or "[No speech detected in this file.]"
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"Porch word-ear not reachable on 9785: {e}")
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"FFmpeg audio extraction failed: {e.stderr}")
     finally:
@@ -181,7 +188,7 @@ def describe_audio_bridge() -> str:
 def get_latest_transcript() -> str:
     """
     Fetch the most recent real-time transcript from the audio bridge buffer.
-    Returns whatever Everett just said, via always-on Whisper transcription.
+    Returns whatever Everett just said, via the Porch word-ear on :9785.
     """
     try:
         with urllib.request.urlopen("http://localhost:8765/latest", timeout=3) as r:
@@ -272,6 +279,60 @@ def get_current_view() -> ImageContent:
         raise RuntimeError(f"Vision bridge not reachable on 8765: {e.reason}")
     except Exception as e:
         raise RuntimeError(f"Error fetching live view: {e}")
+
+def _bridge_json(path: str, method: str = "GET", payload: dict | None = None, timeout: float = 8.0) -> str:
+    import json
+    url = f"http://localhost:8765{path}"
+    try:
+        if method == "GET":
+            req = urllib.request.Request(url, method="GET")
+        else:
+            body = json.dumps(payload or {}).encode("utf-8")
+            req = urllib.request.Request(
+                url,
+                data=body,
+                headers={"Content-Type": "application/json"},
+                method=method,
+            )
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.read().decode("utf-8")
+    except urllib.error.URLError as e:
+        return f"Bridge not reachable on 8765: {e.reason}"
+    except Exception as e:
+        return f"Bridge call failed: {e}"
+
+
+@mcp.tool()
+def apple_music_status() -> str:
+    """Now-playing, volume, and AirPlay rooms for Apple Music via the Christman bridge."""
+    return _bridge_json("/music/status")
+
+
+@mcp.tool()
+def apple_music_play(playlist: str = "") -> str:
+    """Play Apple Music. Pass a playlist name to start that playlist."""
+    if playlist.strip():
+        return _bridge_json("/music/playlist", "POST", {"name": playlist.strip()})
+    return _bridge_json("/music/play", "POST", {})
+
+
+@mcp.tool()
+def apple_music_pause() -> str:
+    """Pause Apple Music."""
+    return _bridge_json("/music/pause", "POST", {})
+
+
+@mcp.tool()
+def apple_music_next() -> str:
+    """Skip to the next Apple Music track."""
+    return _bridge_json("/music/next", "POST", {})
+
+
+@mcp.tool()
+def apple_music_whole_house() -> str:
+    """Play Apple Music on every available AirPlay room in the house."""
+    return _bridge_json("/music/whole-house", "POST", {})
+
 
 if __name__ == "__main__":
     mcp.run()

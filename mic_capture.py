@@ -48,40 +48,75 @@ def _release_singleton():
     except FileNotFoundError:
         pass
 
+# A log FILE, not stdout.
+#
+# WHY (2026-08-30): this process ran from Friday 06:47 to Sunday 01:40 with a
+# dead socket — `lsof` on its PID showed no TCP connection at all — and produced
+# ZERO evidence, because every line above went to a stdout nobody was reading.
+# Two days of failure, invisible. The process being alive was the only signal
+# available, and it said the opposite of the truth.
+_LOG_PATH = os.path.expanduser("~/Library/Logs/mic_capture.log")
+os.makedirs(os.path.dirname(_LOG_PATH), exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [mic_capture] %(message)s",
-    datefmt="%H:%M:%S"
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[logging.FileHandler(_LOG_PATH), logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
 
 # ── Config ────────────────────────────────────────────────────────────────────
 WS_URL = "ws://localhost:8765/ws/audio"
-SAMPLE_RATE = 16000       # Hz — Whisper's native rate
+SAMPLE_RATE = 16000       # Hz — Porch / PCM16 mono
 CHUNK_SECONDS = 2.0       # seconds per send
 CHANNELS = 1              # mono
 DTYPE = "int16"           # PCM16
 
 # ── Audio capture queue ───────────────────────────────────────────────────────
 audio_queue: asyncio.Queue = None  # set in main()
+event_loop: asyncio.AbstractEventLoop = None  # set in main()
+_frames_in = 0  # counts callbacks — proves the mic is actually delivering
 
-def mic_callback(indata: np.ndarray, frames: int, time, status):
-    """sounddevice callback — runs on audio thread, puts chunks in queue."""
-    if status:
-        logger.warning(f"Mic status: {status}")
-    if audio_queue is not None:
-        item = indata.copy()
+
+def _enqueue(item) -> None:
+    """Runs ON THE EVENT LOOP. Never call this from the audio thread directly."""
+    if audio_queue is None:
+        return
+    try:
+        audio_queue.put_nowait(item)
+    except asyncio.QueueFull:
+        try:
+            audio_queue.get_nowait()   # drop oldest, keep the freshest audio
+        except asyncio.QueueEmpty:
+            pass
         try:
             audio_queue.put_nowait(item)
         except asyncio.QueueFull:
-            try:
-                audio_queue.get_nowait()
-            except asyncio.QueueEmpty:
-                pass
-            try:
-                audio_queue.put_nowait(item)
-            except asyncio.QueueFull:
-                pass
+            pass
+
+
+def mic_callback(indata: np.ndarray, frames: int, time, status):
+    """sounddevice callback — runs on the AUDIO THREAD, not the event loop.
+
+    THE BUG THIS FIXES (2026-08-30): this used to call audio_queue.put_nowait()
+    directly. asyncio.Queue is NOT thread-safe. Putting from a foreign thread can
+    leave a coroutine parked on `await audio_queue.get()` forever, because the
+    waiter's future is never scheduled on the loop — no exception, no reconnect,
+    no log line. A silent deadlock that looks exactly like a healthy process.
+
+    call_soon_threadsafe is the whole fix: hand the item to the loop, let the
+    loop do the put.
+    """
+    global _frames_in
+    if status:
+        logger.warning("Mic status: %s", status)
+    if audio_queue is None or event_loop is None:
+        return
+    _frames_in += 1
+    try:
+        event_loop.call_soon_threadsafe(_enqueue, indata.copy())
+    except RuntimeError:
+        pass  # loop closing — shutdown in progress
 
 # ── WebSocket sender ──────────────────────────────────────────────────────────
 async def stream_mic_to_bridge():
@@ -92,10 +127,27 @@ async def stream_mic_to_bridge():
     while True:
         try:
             logger.info(f"Connecting to {WS_URL} ...")
-            async with websockets.connect(WS_URL) as ws:
+            async with websockets.connect(
+                WS_URL,
+                ping_interval=20,
+                ping_timeout=120,
+                open_timeout=15,
+            ) as ws:
                 logger.info("Connected — mic is live.")
+                sent = 0
                 while True:
-                    chunk = await audio_queue.get()
+                    # Bounded wait. A queue that goes quiet must surface as an
+                    # event, never as an indefinite park — that silence is
+                    # exactly what hid the last two days.
+                    try:
+                        chunk = await asyncio.wait_for(audio_queue.get(), timeout=10)
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            "no audio from the mic for 10s (callbacks=%d, sent=%d) — "
+                            "mic permission or device may be gone; reconnecting",
+                            _frames_in, sent,
+                        )
+                        break
                     flat = chunk.flatten().astype(np.int16)
                     buffer = np.concatenate([buffer, flat])
 
@@ -108,6 +160,11 @@ async def stream_mic_to_bridge():
                             "sample_rate": SAMPLE_RATE,
                         }
                         await ws.send(json.dumps(payload))
+                        sent += 1
+                        # Liveness that measures the OUTPUT, not the process.
+                        if sent % 15 == 0:
+                            logger.info("streaming — %d chunks sent, %d mic callbacks",
+                                        sent, _frames_in)
 
         except (websockets.ConnectionClosed, ConnectionRefusedError, OSError) as e:
             logger.warning(f"Bridge connection lost ({e}). Retrying in 3s...")
@@ -118,8 +175,9 @@ async def stream_mic_to_bridge():
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 async def main():
-    global audio_queue
+    global audio_queue, event_loop
     audio_queue = asyncio.Queue(maxsize=200)
+    event_loop = asyncio.get_running_loop()
 
     blocksize = int(SAMPLE_RATE * 0.1)  # 100ms blocks into the queue
     with sd.InputStream(
@@ -132,8 +190,22 @@ async def main():
         logger.info(f"Mic open at {SAMPLE_RATE}Hz mono PCM16. Streaming to bridge...")
         await stream_mic_to_bridge()
 
+# NO in-process daemonize here, deliberately.
+#
+# I added one at 02:31 and it killed this process on launch. `import sounddevice`
+# starts CoreAudio/PortAudio threads at import time, and fork() from a
+# multi-threaded process is unsafe — Python warned in plain text
+# ("This process is multi-threaded, use of fork() may lead to deadlocks in the
+# child") and the child died between opening the mic and the first callback.
+#
+# Detaching has to happen BEFORE the audio library loads, which means from the
+# outside. Use run_detached.py:
+#     .venv/bin/python3 run_detached.py mic_capture.py
+# It forks and setsid's while it is still single-threaded, then execs this file.
+
 if __name__ == "__main__":
     _acquire_singleton()
+    logger.info("mic_capture starting — PID %s, log %s", os.getpid(), _LOG_PATH)
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

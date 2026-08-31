@@ -78,3 +78,5 @@ funeral_outputs/
 # Embedded runtime + generated media (never track)
 python@3.12/
 vega_output/
+*.bak
+.bak *

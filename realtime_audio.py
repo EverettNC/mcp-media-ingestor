@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import AsyncGenerator
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from faster_whisper import WhisperModel
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -21,8 +20,9 @@ app = FastAPI(title="MCP Real-Time Audio Bridge")
 # Shared buffer for latest transcript
 latest_transcript: dict = {"text": "", "start": 0.0, "end": 0.0, "language": "", "updated": False}
 
-# Load model once (small + int8 = fast on your Intel mac)
-model = WhisperModel("small", device="cpu", compute_type="int8")
+# This legacy server is dead. Run main.py — the word-ear is local whisper.cpp,
+# with Porch on :9785 as a second path. Neither takes a key.
+model = None
 
 class AudioStreamProcessor:
     def __init__(self):

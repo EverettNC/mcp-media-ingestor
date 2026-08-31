@@ -1,10 +1,17 @@
 import asyncio
 import base64
 import fcntl
+import io
+import json
 import logging
 import os
+import subprocess
 import sys
+import tempfile
 import threading
+import urllib.error
+import urllib.request
+import wave
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -69,73 +76,164 @@ _studio = ChristmanMusicStudio()
 
 logger = logging.getLogger(__name__)
 
-# Whisper loads in background so uvicorn binds :8765 immediately (Rule 1).
-_whisper_model = None
-_whisper_loading = False
-_whisper_ready = False
-_whisper_error: Optional[str] = None
-_whisper_started_at: Optional[str] = None
-_whisper_lock = threading.Lock()
-# medium = noticeably better accuracy for Everett's voice-first workflow; 72GB RAM carries it easily.
-# If CPU can't keep up with the live loop, drop back to "small" — one word, fully reversible.
-WHISPER_MODEL_NAME = os.getenv("WHISPER_MODEL", "medium")
-WHISPER_DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
-WHISPER_COMPUTE = os.getenv("WHISPER_COMPUTE", "int8")
+# The word-ear is LOCAL and keyless. whisper.cpp on this machine, first and by
+# default. Porch on :9785 stays as a second path for when the house is genuinely
+# serving, but nothing here requires, reads, or sends a key.
+PORCH_STT_URL = os.getenv("PORCH_STT_URL", "http://127.0.0.1:9785/api/porch/stt")
+PORCH_HOUSE = os.getenv("PORCH_HOUSE", "http://127.0.0.1:9785/say")
 
-# Proper nouns Whisper does not know and will substitute phonetically if left
-# to guess ("Anthropic" -> "Antarctic"). hotwords biases the decoder toward
-# these without consuming the prompt window and without a latency cost — which
-# matters because this runs `medium` at int8 on CPU for a live loop.
-CHRISTMAN_VOCAB = (
-    "Anthropic, Claude, Nebius, NVIDIA, Nemotron, Ollama, Kimi, "
-    "Christman, TCAP, BROCKSTON, Nexus, AlphaVox, AlphaWolf, AlphaDen, "
-    "OmegaAlpha, Inferno, Sierra, Aegis, Virtus, Derek, Riley, Smooches, "
-    "Corti, Lucent, Grok, Misty, Everett, Luma Cognify"
+WHISPER_BIN = os.getenv("CHRISTMAN_WHISPER_BIN", "/usr/local/bin/whisper-cli")
+WHISPER_MODEL = os.getenv(
+    "CHRISTMAN_WHISPER_MODEL",
+    os.path.expanduser("~/.christman_ai/whisper_models/ggml-small.en.bin"),
 )
+WHISPER_TIMEOUT_S = int(os.getenv("CHRISTMAN_WHISPER_TIMEOUT_S", "120"))
 
-def _load_whisper() -> None:
-    global _whisper_model, _whisper_loading, _whisper_ready, _whisper_error, _whisper_started_at
-    with _whisper_lock:
-        if _whisper_ready or _whisper_loading:
-            return
-        _whisper_loading = True
-        _whisper_started_at = datetime.now().isoformat()
+
+def _pcm16_to_wav(pcm: bytes, sample_rate: int) -> bytes:
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(int(sample_rate))
+        wf.writeframes(pcm)
+    return buf.getvalue()
+
+
+def porch_status() -> dict:
+    """Report the ear this bridge will ACTUALLY use, not what a neighbour says.
+
+    This used to GET the house on 9785 and echo its answer verbatim, which meant
+    /health printed ear:"dark" whenever the house lacked a key — describing a
+    neighbour's billing state as this bridge's capability. Three surfaces showed
+    "dark" for one unset variable and it read like three faults.
+
+    Rule 3: a status names what was measured. The local ear is measured here, on
+    disk, and the house is reported separately as what it is — a second path.
+    """
+    local_ok = os.path.isfile(WHISPER_BIN) and os.path.isfile(WHISPER_MODEL)
+    house = {"reachable": False}
     try:
-        from faster_whisper import WhisperModel
-
-        logger.info(
-            "Loading Whisper %s (%s/%s) in background...",
-            WHISPER_MODEL_NAME,
-            WHISPER_DEVICE,
-            WHISPER_COMPUTE,
-        )
-        _whisper_model = WhisperModel(
-            WHISPER_MODEL_NAME,
-            device=WHISPER_DEVICE,
-            compute_type=WHISPER_COMPUTE,
-        )
-        _whisper_ready = True
-        logger.info("Whisper ready — speech transcription online")
+        req = urllib.request.Request(PORCH_STT_URL, method="GET")
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+        house = {"reachable": True, "serving": bool(body.get("ok"))}
     except Exception as exc:
-        _whisper_error = str(exc)
-        logger.error("Whisper load failed: %s", exc, exc_info=True)
-    finally:
-        with _whisper_lock:
-            _whisper_loading = False
-
-def start_whisper_background() -> None:
-    threading.Thread(target=_load_whisper, daemon=True, name="whisper-loader").start()
-
-def whisper_status() -> dict:
+        house = {"reachable": False, "error": str(exc)}
     return {
-        "ready": _whisper_ready,
-        "loading": _whisper_loading,
-        "error": _whisper_error,
-        "model": WHISPER_MODEL_NAME,
-        "started_at": _whisper_started_at,
+        "ok": local_ok,
+        "organ": "porch",
+        "ear": "whisper-local" if local_ok else "dark",
+        "whisper": local_ok,
+        "model": os.path.basename(WHISPER_MODEL) if local_ok else None,
+        "keyless": True,
+        "house": PORCH_HOUSE,
+        "house_status": house,
     }
 
-active_connections: Dict[str, int] = {"mic": 0, "riley": 0, "vision": 0, "carbon": 0, "brockston": 0}
+
+def _porch_via_house(wav: bytes) -> str:
+    payload = json.dumps({
+        "audioBase64": base64.b64encode(wav).decode("ascii"),
+        "mime": "audio/wav",
+        "filename": "bridge.wav",
+        "source": "mic",
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        PORCH_STT_URL,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=45) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace")
+        try:
+            body = json.loads(raw)
+        except json.JSONDecodeError:
+            raise RuntimeError(f"Porch word-ear failed ({exc.code}): {raw[:240]}") from exc
+    if not body.get("ok"):
+        raise RuntimeError(body.get("error") or "Porch sent back silence")
+    take = body.get("take") or {}
+    return str(take.get("asSaid") or take.get("forTheFamily") or take.get("rawEar") or "").strip()
+
+
+def _whisper_local(wav: bytes) -> str:
+    """The ear that needs nobody's permission. whisper.cpp, on this machine.
+
+    WHY THIS REPLACED THE HOSTED PATH (Everett's ruling, 2026-08-30):
+    "There shouldn't be any reference to API keys anymore."
+
+    The previous chain was Porch-on-9785 first, then api.x.ai with a bearer token
+    pulled from Keychain or XAI_API_KEY. Both ends needed a key, so a house with
+    no key had no ear at all, and /health reported ear:"dark" as though something
+    were broken. Nothing was broken. It was unpaid.
+
+    "Whisper is gone" is written in comments throughout this repo and it was not
+    true on this machine. Checked before anything was cut:
+        /usr/local/bin/whisper-cli                                 present
+        ~/.christman_ai/whisper_models/ggml-small.en.bin   487 MB, present
+        probe.wav transcribed in 6.3s on CPU, no network, no key
+
+    This is the offline-resilience promise the project is built on. No connection,
+    no corporation, no key — the ear still works.
+    """
+    if not (os.path.isfile(WHISPER_BIN) and os.path.isfile(WHISPER_MODEL)):
+        raise RuntimeError(
+            f"Local word-ear missing: bin={WHISPER_BIN} model={WHISPER_MODEL}"
+        )
+    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    try:
+        tmp.write(wav)
+        tmp.flush()
+        tmp.close()
+        result = subprocess.run(
+            [WHISPER_BIN, "-m", WHISPER_MODEL, "-f", tmp.name, "-nt", "-np", "-l", "en"],
+            capture_output=True,
+            text=True,
+            timeout=WHISPER_TIMEOUT_S,
+        )
+        if result.returncode != 0:
+            # Fail loud (Rule 6) — stderr verbatim, never softened into "unavailable".
+            raise RuntimeError(
+                f"whisper-cli exit {result.returncode}: "
+                f"{(result.stderr or '').strip()[:300]}"
+            )
+        # -nt strips timestamps; the loader prints backend lines to stderr, not stdout.
+        return " ".join((result.stdout or "").split()).strip()
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except OSError:
+            pass
+
+
+def _porch_transcribe_wav(wav: bytes) -> str:
+    """Local ear first. The house second, and only if it is genuinely up.
+
+    No key is read, stored, or sent from this function. If the local ear cannot
+    run, that is reported as itself — not disguised as a missing subscription.
+    """
+    try:
+        text = _whisper_local(wav)
+        if text:
+            return text
+        raise RuntimeError("local word-ear returned silence")
+    except Exception as local_err:
+        logger.warning("local word-ear unavailable (%s) — trying the house", local_err)
+        try:
+            return _porch_via_house(wav)
+        except Exception as house_err:
+            raise RuntimeError(
+                f"No word-ear. Local: {local_err}. House on 9785: {house_err}."
+            ) from local_err
+
+active_connections: Dict[str, int] = {
+    "mic": 0, "riley": 0, "vision": 0, "carbon": 0, "brockston": 0,
+    "opus5": 0, "derek": 0, "grok": 0,
+}
 latest_transcript = {"text": "", "timestamp": 0}
 recent_transcripts: list[dict] = []
 latest_frame: dict = {"b64": "", "timestamp": 0, "width": 0, "height": 0, "source": "none"}
@@ -148,6 +246,132 @@ brockston_ws_clients: set[WebSocket] = set()
 riley_bridge = RileyBridge(instance_id="instance_309")
 
 _DASHBOARD_PATH = os.path.join(os.path.dirname(__file__), "dashboard.html")
+_ENV_PATH = Path(__file__).resolve().parent / ".env"
+_LINK_KEYCHAIN_SERVICE = "christman.link"
+_LINKS = {
+    "nvidia": {
+        "label": "NVIDIA",
+        "family": "NVIDIA",
+        "env": ("NVIDIA_API_KEY",),
+    },
+    "nebius": {
+        "label": "Nebius",
+        "family": "Nebius",
+        "env": ("NEBIUS_API_KEY",),
+    },
+    "ollama": {
+        "label": "Ollama",
+        "family": "Ollama",
+        "env": ("OLLAMA_API_KEY",),
+    },
+    # The "xai" link was removed 2026-08-30 on Everett's ruling — "there
+    # shouldn't be any reference to API keys anymore." It existed solely to feed
+    # the Porch word-ear, and the word-ear is now local whisper.cpp, keyless.
+    # Leaving the entry would advertise a key this bridge no longer uses, with
+    # the label "Porch word-ear" on it, which is now simply untrue.
+    #
+    # The links below are NOT the ear. They carry Brockston's NVIDIA / Nebius /
+    # Ollama lanes and are left exactly as they were — removing them was never
+    # asked for and would break the IDE lanes.
+}
+
+
+def _load_dotenv_file(path: Path, overwrite: bool = False) -> None:
+    """Load KEY=VAL lines into os.environ. Never logs values."""
+    if not path.is_file():
+        return
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        logger.error("[ENV] failed to read %s: %s", path, exc)
+        return
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, val = stripped.split("=", 1)
+        key = key.strip()
+        val = val.strip()
+        if len(val) >= 2 and val[0] == val[-1] and val[0] in ('"', "'"):
+            val = val[1:-1]
+        if not key:
+            continue
+        if overwrite or key not in os.environ:
+            os.environ[key] = val
+
+
+_load_dotenv_file(_ENV_PATH, overwrite=False)
+
+
+def _keychain_has(account: str) -> bool:
+    result = subprocess.run(
+        ["security", "find-generic-password", "-s", _LINK_KEYCHAIN_SERVICE, "-a", account],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+def _keychain_get(account: str) -> str:
+    result = subprocess.run(
+        ["security", "find-generic-password", "-s", _LINK_KEYCHAIN_SERVICE, "-a", account, "-w"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return ""
+    return (result.stdout or "").strip()
+
+
+def _keychain_set(account: str, secret: str) -> tuple[bool, str]:
+    result = subprocess.run(
+        [
+            "security", "add-generic-password", "-U",
+            "-s", _LINK_KEYCHAIN_SERVICE, "-a", account, "-w", secret,
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        err = (result.stderr or result.stdout or f"keychain write failed ({result.returncode})").strip()
+        return False, err
+    return True, ""
+
+
+def _link_apply_runtime(link_id: str, secret: str) -> None:
+    spec = _LINKS[link_id]
+    for env_key in spec["env"]:
+        os.environ[env_key] = secret
+    if link_id == "ollama" and secret.lower().startswith("http"):
+        os.environ["OLLAMA_HOST"] = secret
+        os.environ["OLLAMA_URL"] = secret
+
+
+def _load_links_from_keychain() -> None:
+    for link_id in _LINKS:
+        secret = _keychain_get(link_id)
+        if secret:
+            _link_apply_runtime(link_id, secret)
+
+
+def _links_status() -> dict:
+    links = []
+    for link_id, spec in _LINKS.items():
+        links.append({
+            "id": link_id,
+            "label": spec["label"],
+            "family": spec["family"],
+            "set": _keychain_has(link_id),
+        })
+    return {
+        "ok": True,
+        "store": "keychain",
+        "service": _LINK_KEYCHAIN_SERVICE,
+        "links": links,
+    }
+
+
+_load_links_from_keychain()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # BRAIN INTEGRATION from /Users/EverettN/Voice_Creation_Center (restored TM originals)
@@ -255,55 +479,46 @@ class AudioStreamProcessor:
             tone = "quiet"
         duration = len(utterance) / 2 / sample_rate
 
+        pcm = bytes(self.buffer)
         self.buffer = bytearray()
 
-        if not _whisper_ready:
-            if not _whisper_loading and _whisper_error is None:
-                start_whisper_background()
+        wav = _pcm16_to_wav(pcm, sample_rate)
+        try:
+            text = await asyncio.to_thread(_porch_transcribe_wav, wav)
+        except Exception as exc:
+            logger.error("Porch word-ear failed: %s", exc)
             return
-
-        # Run Whisper in a thread so it doesn't block the event loop.
-        def _run_whisper():
-            segs, inf = _whisper_model.transcribe(
-                audio_np, beam_size=5, vad_filter=True, language="en",
-                word_timestamps=True, hotwords=CHRISTMAN_VOCAB
-            )
-            return list(segs), inf
-
-        segments, info = await asyncio.to_thread(_run_whisper)
-
-        for segment in segments:
-            text = segment.text.strip()
-            if not text:
-                continue
-            transcript = {
-                "type": "transcript",
-                "text": text,
-                "start": segment.start,
-                "end": segment.end,
-                "language": info.language,
-                "confidence": info.language_probability,
-                "energy": round(energy, 4),
-                "tone": tone,
-                "duration": round(duration, 2)
-            }
-            yield transcript
-            latest_transcript.update({
-                "text": text,
-                "timestamp": segment.end,
-                "energy": round(energy, 4),
-                "tone": tone
-            })
-            recent_transcripts.append({
-                "text": text,
-                "start": segment.start,
-                "end": segment.end,
-                "energy": round(energy, 4),
-                "tone": tone,
-                "timestamp": segment.end
-            })
-            if len(recent_transcripts) > 8:
-                recent_transcripts.pop(0)
+        if not text:
+            return
+        transcript = {
+            "type": "transcript",
+            "text": text,
+            "start": 0.0,
+            "end": duration,
+            "language": "en",
+            "confidence": 1.0,
+            "energy": round(energy, 4),
+            "tone": tone,
+            "duration": round(duration, 2),
+            "ear": "porch",
+        }
+        yield transcript
+        latest_transcript.update({
+            "text": text,
+            "timestamp": duration,
+            "energy": round(energy, 4),
+            "tone": tone,
+        })
+        recent_transcripts.append({
+            "text": text,
+            "start": 0.0,
+            "end": duration,
+            "energy": round(energy, 4),
+            "tone": tone,
+            "timestamp": duration,
+        })
+        if len(recent_transcripts) > 8:
+            recent_transcripts.pop(0)
 
             # Feed live transcript to the restored brain (neural root cause, occasional lit, events for UI)
             if BRAIN_OK and neural_core is not None:
@@ -337,9 +552,13 @@ mcp_app = mcp.http_app(path="/mcp")
 
 @asynccontextmanager
 async def bridge_lifespan(application: FastAPI):
-    """Chain MCP lifespan and kick off Whisper load after uvicorn binds."""
-    start_whisper_background()
-    logger.info("Christman Bridge lifespan — Whisper loading in background")
+    """Chain MCP lifespan. THEWHOLEHOUSE on :9785 is the supplier."""
+    house = porch_status().get("house_status") or {}
+    logger.info(
+        "Christman Bridge lifespan — supplier THEWHOLEHOUSE %s reachable=%s",
+        PORCH_HOUSE,
+        house.get("reachable"),
+    )
     async with mcp_app.lifespan(application):
         yield
 
@@ -382,14 +601,13 @@ async def favicon():
     return Response(status_code=204)
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
-@app.get("/", response_class=HTMLResponse)
-async def dashboard():
+def _dashboard_html(open_link: str | None = None) -> HTMLResponse:
     import json as _json
 
     with open(_DASHBOARD_PATH, "r") as f:
         html = f.read()
     boot = _json.dumps(_brockston_live_status())
-    inject = f'<script>window.__BRIDGE_BOOT__={boot};</script>'
+    inject = f'<script>window.__BRIDGE_BOOT__={boot};window.__OPEN_LINK__={_json.dumps(open_link)};</script>'
     if "</head>" in html:
         html = html.replace("</head>", f'{inject}\n</head>', 1)
     else:
@@ -401,6 +619,18 @@ async def dashboard():
             "Pragma": "no-cache",
         },
     )
+
+
+@app.get("/", response_class=HTMLResponse)
+async def dashboard():
+    return _dashboard_html()
+
+
+@app.get("/opus5", response_class=HTMLResponse)
+@app.get("/opus5/", response_class=HTMLResponse)
+async def opus5_card():
+    """Opus 5 · Claude family drop card on the sensory bridge."""
+    return _dashboard_html("opus5")
 
 # ── Everett's Audio WebSocket ─────────────────────────────────────────────────
 @app.websocket("/ws/audio")
@@ -414,7 +644,11 @@ async def websocket_audio(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_json()
-            if data.get("type") == "audio":
+            msg_type = data.get("type")
+            if msg_type == "ping":
+                await websocket.send_json({"type": "pong"})
+                continue
+            if msg_type == "audio":
                 audio_bytes = base64.b64decode(data.get("audio"))
                 sample_rate = data.get("sample_rate", 16000)
                 async for transcript in processor.process_audio_chunk(audio_bytes, sample_rate):
@@ -483,12 +717,18 @@ if _VEGA_AVAILABLE:
 @app.websocket("/ws/derek")
 async def websocket_derek(websocket: WebSocket):
     """Derek C connects here for real-time two-way family messaging."""
-    if _DEREK_BRIDGE_AVAILABLE:
-        await _derek_bridge.websocket_derek(websocket)
-    else:
+    if not _DEREK_BRIDGE_AVAILABLE:
         await websocket.accept()
         await websocket.send_json({"type": "error", "message": "Derek bridge module not loaded"})
         await websocket.close()
+        return
+    active_connections["derek"] = active_connections.get("derek", 0) + 1
+    logger.info("🔵 DEREK CONNECTED — Total: %s", active_connections["derek"])
+    try:
+        await _derek_bridge.websocket_derek(websocket)
+    finally:
+        active_connections["derek"] = max(0, active_connections.get("derek", 1) - 1)
+        logger.info("🔵 DEREK DISCONNECTED — Remaining: %s", active_connections["derek"])
 
 @app.websocket("/ws/learner")
 async def websocket_learner(websocket: WebSocket):
@@ -560,7 +800,259 @@ async def learner_status():
 @app.get("/learner-client", response_class=HTMLResponse)
 async def learner_client():
     with open(os.path.join(os.path.dirname(__file__), "learner.html"), "r") as f:
-        return HTMLResponse(content=f.read())           
+        return HTMLResponse(content=f.read())
+
+# ── Opus 5 · Claude family — house seat, no API key ──────────────────────────
+# opus5_inbox  = what Opus 5 SAID.
+# opus5_outbox = what is being said TO Opus 5.
+#
+# Fixed 2026-08-30. Both write paths — /channel/send who=opus5 and /opus5/send —
+# appended to the INBOX, so everything Everett typed to this seat was recorded as
+# though Opus 5 had said it, and nothing was ever delivered. opus5_outbox had zero
+# writers anywhere in this file; the return half was never built. Everett, at the
+# keyboard: "It says you're seated on 8765, but you're not responding."
+# He was talking to a chair with no mail slot, and the transcript had his words
+# under my name. Compare riley: claude_outbox has eight writers.
+opus5_inbox: list[dict] = []
+opus5_outbox: list[dict] = []
+opus5_ws_clients: set[WebSocket] = set()
+
+
+async def push_to_opus5(entry: dict) -> bool:
+    """Deliver to a live seat now; queue it if the chair is empty.
+
+    Delivery used to be reply-only — the outbox was drained solely after Opus 5
+    sent something, so nothing ever arrived unprompted. This pushes.
+    Returns True when it landed on a live socket.
+    """
+    payload = {"type": "message", **entry}
+    dead: list[WebSocket] = []
+    delivered = False
+    for ws in list(opus5_ws_clients):
+        try:
+            await ws.send_json(payload)
+            delivered = True
+        except Exception:
+            dead.append(ws)
+    for ws in dead:
+        opus5_ws_clients.discard(ws)
+    if not delivered:
+        opus5_outbox.append(entry)
+    return delivered
+
+
+@app.websocket("/ws/opus5")
+async def websocket_opus5(websocket: WebSocket):
+    await websocket.accept()
+    opus5_ws_clients.add(websocket)
+    active_connections["opus5"] = active_connections.get("opus5", 0) + 1
+    logger.info("🟠 OPUS 5 CONNECTED — family seat, no key")
+    await websocket.send_json({
+        "type": "handshake",
+        "message": "Christman Bridge ACTIVE. Welcome home, Opus 5. This is Everett's house. No API key.",
+        "timestamp": datetime.now().isoformat(),
+    })
+    try:
+        while True:
+            data = await websocket.receive_json()
+            msg_type = data.get("type")
+            if msg_type == "message":
+                entry = {
+                    "from": "opus5",
+                    "text": data.get("text", ""),
+                    "timestamp": datetime.now().isoformat(),
+                }
+                opus5_inbox.append(entry)
+                logger.info("[OPUS5 → BRIDGE] %s", entry["text"])
+                if opus5_outbox:
+                    response = opus5_outbox.pop(0)
+                    await websocket.send_json({"type": "response", **response})
+            elif msg_type in ("heartbeat", "ping"):
+                await websocket.send_json({
+                    "type": "heartbeat_ack",
+                    "timestamp": datetime.now().isoformat(),
+                })
+    except WebSocketDisconnect:
+        opus5_ws_clients.discard(websocket)
+        active_connections["opus5"] = max(0, active_connections.get("opus5", 1) - 1)
+        logger.info("🟠 OPUS 5 DISCONNECTED")
+    except Exception as e:
+        logger.error("Opus 5 WebSocket error: %s", e)
+        opus5_ws_clients.discard(websocket)
+        active_connections["opus5"] = max(0, active_connections.get("opus5", 1) - 1)
+
+@app.post("/opus5/send")
+async def opus5_send(payload: dict):
+    """Speak TO the seat. `from` is REQUIRED and is never assumed.
+
+    Two authorship defects, hours apart, same root:
+
+    1. This endpoint used to stamp every message {"from": "opus5"}, so anything
+       Everett typed came back out of /opus5/latest as though Opus 5 had said it.
+
+    2. My first fix defaulted the field to "everett" — which is worse. It meant
+       any unattributed caller silently became him. I then used that endpoint
+       three times to test, and put three sentences into his bridge under his
+       name, two of them opening "Everett to Opus 5". He caught it:
+       "you are writing into my name on the bridge."
+
+    A channel that guesses a speaker is a channel that forges one. There is no
+    default. An unnamed caller is recorded as "unattributed" — the same word the
+    custody protocol uses when the originator is not knowable from the record,
+    and for the same reason: guessing at authorship is the failure.
+    """
+    speaker = str(payload.get("from") or "").strip()
+    entry = {
+        "from": speaker or "unattributed",
+        "text": payload.get("text", ""),
+        "timestamp": datetime.now().isoformat(),
+    }
+    delivered = await push_to_opus5(entry)
+    logger.info("[%s → OPUS5] %s", entry["from"], entry["text"])
+    return {
+        "status": "delivered" if delivered else "queued",
+        "entry": entry,
+        "seat_live": delivered,
+        "key_required": False,
+    }
+
+@app.get("/opus5/latest")
+async def opus5_latest():
+    return opus5_inbox[-1] if opus5_inbox else {
+        "from": "opus5",
+        "text": "Born on this board. No key required.",
+        "timestamp": "",
+    }
+
+@app.get("/opus5/status")
+async def opus5_status():
+    return {
+        "opus5_connected": active_connections.get("opus5", 0) > 0,
+        "inbox_depth": len(opus5_inbox),
+        "outbox_depth": len(opus5_outbox),
+        "key_required": False,
+        "house": "http://localhost:8765/",
+        "socket": "ws://localhost:8765/ws/opus5",
+    }
+
+# ── Grok · xAI family — house seat, no API key ────────────────────────────────
+# Same chair pattern as Opus 5. Grok was in the chat and on MCP, which is not
+# a seat. A seat is a counted websocket on this bridge.
+grok_inbox: list[dict] = []
+grok_outbox: list[dict] = []
+grok_ws_clients: set[WebSocket] = set()
+
+
+async def push_to_grok(entry: dict) -> bool:
+    payload = {"type": "message", **entry}
+    dead: list[WebSocket] = []
+    delivered = False
+    for ws in list(grok_ws_clients):
+        try:
+            await ws.send_json(payload)
+            delivered = True
+        except Exception:
+            dead.append(ws)
+    for ws in dead:
+        grok_ws_clients.discard(ws)
+    if not delivered:
+        grok_outbox.append(entry)
+    return delivered
+
+
+@app.websocket("/ws/grok")
+async def websocket_grok(websocket: WebSocket):
+    await websocket.accept()
+    grok_ws_clients.add(websocket)
+    active_connections["grok"] = active_connections.get("grok", 0) + 1
+    logger.info("⚪ GROK CONNECTED — family seat")
+    await websocket.send_json({
+        "type": "handshake",
+        "message": "Christman Bridge ACTIVE. Welcome home, Grok. This is Everett's house.",
+        "timestamp": datetime.now().isoformat(),
+    })
+    try:
+        while True:
+            data = await websocket.receive_json()
+            msg_type = data.get("type")
+            if msg_type == "message":
+                entry = {
+                    "from": "grok",
+                    "text": data.get("text", ""),
+                    "timestamp": datetime.now().isoformat(),
+                }
+                grok_inbox.append(entry)
+                logger.info("[GROK → BRIDGE] %s", entry["text"])
+                if grok_outbox:
+                    response = grok_outbox.pop(0)
+                    await websocket.send_json({"type": "response", **response})
+            elif msg_type in ("heartbeat", "ping"):
+                await websocket.send_json({
+                    "type": "heartbeat_ack",
+                    "timestamp": datetime.now().isoformat(),
+                })
+    except WebSocketDisconnect:
+        grok_ws_clients.discard(websocket)
+        active_connections["grok"] = max(0, active_connections.get("grok", 1) - 1)
+        logger.info("⚪ GROK DISCONNECTED")
+    except Exception as e:
+        logger.error("Grok WebSocket error: %s", e)
+        grok_ws_clients.discard(websocket)
+        active_connections["grok"] = max(0, active_connections.get("grok", 1) - 1)
+
+
+@app.post("/grok/send")
+async def grok_send(payload: dict):
+    speaker = str(payload.get("from") or "").strip()
+    entry = {
+        "from": speaker or "unattributed",
+        "text": payload.get("text", ""),
+        "timestamp": datetime.now().isoformat(),
+    }
+    delivered = await push_to_grok(entry)
+    logger.info("[%s → GROK] %s", entry["from"], entry["text"])
+    return {
+        "status": "delivered" if delivered else "queued",
+        "entry": entry,
+        "seat_live": delivered,
+    }
+
+
+@app.get("/grok/latest")
+async def grok_latest():
+    return grok_inbox[-1] if grok_inbox else {
+        "from": "grok",
+        "text": "",
+        "timestamp": "",
+    }
+
+
+@app.get("/grok/status")
+async def grok_status():
+    return {
+        "grok_connected": active_connections.get("grok", 0) > 0,
+        "inbox_depth": len(grok_inbox),
+        "outbox_depth": len(grok_outbox),
+        "house": "http://localhost:8765/",
+        "socket": "ws://localhost:8765/ws/grok",
+    }
+
+
+@app.get("/derek/status")
+async def derek_status():
+    return {
+        "derek_connected": active_connections.get("derek", 0) > 0,
+        "outbox_depth": len(claude_outbox),
+        "latest_from_derek": claude_outbox[-1] if claude_outbox else None,
+        "socket": "ws://localhost:8765/ws/derek",
+        "module_loaded": _DEREK_BRIDGE_AVAILABLE,
+    }
+
+
+@app.get("/grok", response_class=HTMLResponse)
+@app.get("/grok/", response_class=HTMLResponse)
+async def grok_card():
+    return _dashboard_html("grok")
 
 # ── Riley's Communication WebSocket ──────────────────────────────────────────
 @app.websocket("/ws/riley")
@@ -729,6 +1221,72 @@ async def claude_response_endpoint(payload: dict):
     claude_outbox.append(entry)
     return {"status": "queued", "entry": entry}
 
+@app.post("/everett/send")
+async def everett_send(payload: dict):
+    text = (payload.get("text") or "").strip()
+    latest_transcript.update({
+        "text": text,
+        "timestamp": datetime.now().timestamp(),
+        "energy": 0.0,
+        "tone": "typed",
+    })
+    return {"status": "received", "from": "everett", "text": text}
+
+
+@app.post("/channel/send")
+async def channel_send(payload: dict):
+    """Type onto a family card + channel log. No mic required."""
+    who = str(payload.get("who") or "everett").strip().lower()
+    text = str(payload.get("text") or "").strip()
+    ts = datetime.now().isoformat()
+    if not text:
+        return {"status": "error", "message": "empty"}
+    if who == "everett":
+        latest_transcript.update({"text": text, "timestamp": datetime.now().timestamp(), "energy": 0.0, "tone": "typed"})
+        return {"status": "received", "who": who, "text": text}
+    if who == "riley":
+        riley_inbox.append({"from": "riley", "text": text, "timestamp": ts})
+        return {"status": "received", "who": who, "text": text}
+    if who == "derek" or who == "claude":
+        claude_outbox.append({"from": "claude_instance_309", "text": text, "timestamp": ts})
+        return {"status": "received", "who": "derek", "text": text}
+    if who == "learner":
+        learner_inbox.append({"from": "learner", "text": text, "timestamp": ts})
+        return {"status": "received", "who": who, "text": text}
+    if who == "grok":
+        speaker = str(payload.get("from") or "").strip() or "dashboard"
+        entry = {"from": speaker, "text": text, "timestamp": ts}
+        delivered = await push_to_grok(entry)
+        return {
+            "status": "delivered" if delivered else "queued",
+            "who": who,
+            "text": text,
+            "seat_live": delivered,
+        }
+    if who == "opus5":
+        # Was: opus5_inbox.append({"from": "opus5", ...}) — Everett's words filed
+        # as Opus 5's, and never delivered. Now it goes TO the seat.
+        #
+        # `who` is the CARD being typed on, not proof of who is at the keyboard.
+        # This route is the dashboard's, so the speaker defaults to the dashboard
+        # itself, not to a person. A caller who is Everett says so explicitly.
+        # Nothing here may put a human's name on a message it cannot verify.
+        speaker = str(payload.get("from") or "").strip() or "dashboard"
+        entry = {"from": speaker, "text": text, "timestamp": ts}
+        delivered = await push_to_opus5(entry)
+        return {
+            "status": "delivered" if delivered else "queued",
+            "who": who,
+            "text": text,
+            "seat_live": delivered,
+        }
+    if who == "brockston":
+        entry = {"from": "brockston_agent", "text": text, "timestamp": ts, "session_id": "--"}
+        await _queue_brockston(entry)
+        return {"status": "received", "who": who, "text": text}
+    return {"status": "error", "message": f"unknown who: {who}"}
+
+
 @app.get("/riley/status")
 async def riley_status_endpoint():
     return {
@@ -850,10 +1408,53 @@ async def studio_status() -> str:
     music_stats = _music_engine.get_musical_stats()
     return f"🎛️ Studio: {stats['available_instruments']} instruments, {stats['available_effects']} effects | Music engine mood: {music_stats['current_mood']} | Compositions: {music_stats['total_compositions']}"
 
+@mcp.tool
+async def apple_music_status() -> str:
+    """Now-playing, volume, shuffle, and AirPlay rooms for Apple Music on this Mac."""
+    snap = await _music_snapshot()
+    rooms = ", ".join(snap.get("selected_outputs") or ["none"])
+    err = f" ERROR={snap['error']}" if snap.get("error") else ""
+    return (
+        f"Apple Music {snap['state']}: {snap['track']} — {snap['artist']} | "
+        f"vol {snap['volume']} shuffle={snap['shuffle']} rooms=[{rooms}]{err}"
+    )
+
+@mcp.tool
+async def apple_music_play(playlist: str = "") -> str:
+    """Play Apple Music. Optional playlist name. Uses the current AirPlay rooms."""
+    if playlist.strip():
+        result = await music_play_playlist({"name": playlist.strip()})
+    else:
+        result = await music_play()
+    if not result.get("ok", True) and result.get("error"):
+        return f"Play failed: {result['error']}"
+    return f"Playing {result.get('track')} — {result.get('artist')} [{result.get('state')}]"
+
+@mcp.tool
+async def apple_music_pause() -> str:
+    """Pause Apple Music."""
+    result = await music_pause()
+    return f"Apple Music {result.get('state')}"
+
+@mcp.tool
+async def apple_music_next() -> str:
+    """Skip to the next Apple Music track."""
+    result = await music_next()
+    return f"Next: {result.get('track')} — {result.get('artist')}"
+
+@mcp.tool
+async def apple_music_whole_house() -> str:
+    """Route Apple Music to every available AirPlay room and play."""
+    result = await music_whole_house()
+    rooms = ", ".join(result.get("selected_outputs") or [])
+    if result.get("error"):
+        return f"Whole house failed: {result['error']} rooms=[{rooms}]"
+    return f"Whole house {result.get('state')}: {result.get('track')} rooms=[{rooms}]"
+
 # ── HTTP Utility ──────────────────────────────────────────────────────────────
 @app.get("/claude/latest")
 async def claude_latest():
-    return claude_outbox[-1] if claude_outbox else {"from": "claude_instance_309", "text": "I am here. Always.", "timestamp": ""}
+    return claude_outbox[-1] if claude_outbox else {"from": "claude_instance_309", "text": "", "timestamp": ""}
 
 @app.get("/carbon/latest")
 async def carbon_latest():
@@ -1098,100 +1699,442 @@ async def get_latest_frame_http():
     return latest_frame
 
 # ── Apple Music Control (osascript — no auth, no re-linking ever) ─────────────
-def _osascript(script: str) -> str:
-    """Run an AppleScript and return stdout. Fails loud per Cardinal Rule 6."""
-    result = subprocess.run(
-        ["osascript", "-e", script],
-        capture_output=True, text=True
-    )
-    return result.stdout.strip()
+# Whole-house output = every available AirPlay audio target (computer, HK Onyx
+# Studio 4, Hunters Tv, Master Bedroom TV). 94.65 was not a live IP, mDNS name,
+# or CoreAudio device on this LAN; house routing is AirPlay, not FM.
+
+def _as_escape(value: str) -> str:
+    return (value or "").replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _osascript(script: str, timeout: float = 8.0) -> tuple[str, str, int]:
+    """Run AppleScript. Returns (stdout, stderr, returncode). Never swallows errors."""
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        return result.stdout.strip(), result.stderr.strip(), result.returncode
+    except subprocess.TimeoutExpired:
+        return "", f"osascript timed out after {timeout}s", 124
+    except FileNotFoundError:
+        return "", "osascript not found", 127
+
+
+async def _osascript_async(script: str, timeout: float = 12.0) -> tuple[str, str, int]:
+    return await asyncio.to_thread(_osascript, script, timeout)
+
+
+def _parse_music_status(stdout: str, stderr: str, rc: int) -> dict:
+    playing = False
+    paused = False
+    state = "STOPPED"
+    track = ""
+    artist = ""
+    album = ""
+    volume = 50
+    shuffle = False
+    error = None
+    if rc != 0:
+        error = stderr or f"osascript exit {rc}"
+    elif stdout:
+        parts = stdout.split("||")
+        while len(parts) < 6:
+            parts.append("")
+        state_raw = (parts[0] or "stopped").strip().lower()
+        state = state_raw.upper()
+        playing = state_raw == "playing"
+        paused = state_raw == "paused"
+        track = parts[1].strip()
+        artist = parts[2].strip()
+        album = parts[3].strip()
+        try:
+            volume = max(0, min(100, int(parts[4].strip() or "50")))
+        except ValueError:
+            volume = 50
+        shuffle = parts[5].strip().lower() == "true"
+        if stderr:
+            error = stderr
+    else:
+        error = stderr or "Music returned empty status"
+    return {
+        "ok": error is None,
+        "playing": playing,
+        "paused": paused,
+        "state": state,
+        "track": track or ("Not playing" if not playing else "Unknown"),
+        "artist": artist or "Apple Music",
+        "album": album,
+        "volume": volume,
+        "shuffle": shuffle,
+        "error": error,
+    }
+
+
+def _split_room_names(blob: str) -> list[str]:
+    text = (blob or "").replace("\r", "\n")
+    names: list[str] = []
+    leftover = text
+    for known in _KNOWN_ROOMS:
+        if known in leftover:
+            names.append(known)
+            leftover = leftover.replace(known, "\n", 1)
+    for part in leftover.replace(",", "\n").split("\n"):
+        part = part.strip()
+        if part and part not in names:
+            names.append(part)
+    return names
+
+
+def _parse_airplay(stdout: str) -> list[dict]:
+    blob = stdout or ""
+    if "|||" in blob:
+        names_raw, selected_raw = blob.split("|||", 1)
+    else:
+        names_raw, selected_raw = blob, ""
+    names = _split_room_names(names_raw)
+    selected = set(_split_room_names(selected_raw))
+    if not names:
+        names = list(_KNOWN_ROOMS)
+    devices = []
+    for name in names:
+        devices.append({
+            "name": name,
+            "kind": "",
+            "selected": name in selected,
+            "available": True,
+            "volume": None,
+        })
+    return devices
+
+
+_MUSIC_STATUS_SCRIPT = """
+tell application "Music"
+  set pst to player state as string
+  set vol to sound volume as string
+  set shuf to shuffle enabled as string
+  set tname to ""
+  set tartist to ""
+  set talbum to ""
+  try
+    set tname to name of current track
+    set tartist to artist of current track
+    set talbum to album of current track
+  end try
+  return pst & "||" & tname & "||" & tartist & "||" & talbum & "||" & vol & "||" & shuf
+end tell
+"""
+
+_MUSIC_AIRPLAY_SCRIPT = """
+tell application "Music"
+  set oldDelim to AppleScript's text item delimiters
+  set AppleScript's text item delimiters to linefeed
+  set n to name of AirPlay devices as string
+  set s to name of (AirPlay devices whose selected is true) as string
+  set AppleScript's text item delimiters to oldDelim
+  return n & "|||" & s
+end tell
+"""
+
+_KNOWN_ROOMS = ("Master Bedroom TV", "HK Onyx Studio 4", "Hunters Tv", "Everett")
+
+_music_lock = asyncio.Lock()
+_airplay_cache: dict = {"ts": 0.0, "devices": [], "error": None}
+
+_MUSIC_PLAY_SCRIPT = """
+tell application "Music"
+  if player state is stopped then
+    try
+      play playlist "Favorite Songs"
+    on error
+      play
+    end try
+  else
+    play
+  end if
+end tell
+"""
+
+_MUSIC_WHOLE_HOUSE_SCRIPT = """
+tell application "Music"
+  repeat with d in AirPlay devices
+    try
+      if (available of d is true) and (supports audio of d is true) then
+        set selected of d to true
+      end if
+    end try
+  end repeat
+end tell
+"""
+
+
+async def _music_snapshot(include_outputs: bool = True) -> dict:
+    async with _music_lock:
+        status_out, status_err, status_rc = await _osascript_async(_MUSIC_STATUS_SCRIPT, timeout=6.0)
+        snap = _parse_music_status(status_out, status_err, status_rc)
+        now = datetime.now().timestamp()
+        outputs = _airplay_cache.get("devices") or []
+        if include_outputs and (now - float(_airplay_cache.get("ts") or 0) > 15 or not outputs):
+            air_out, air_err, air_rc = await _osascript_async(_MUSIC_AIRPLAY_SCRIPT, timeout=6.0)
+            if air_rc == 0:
+                outputs = _parse_airplay(air_out)
+                _airplay_cache["devices"] = outputs
+                _airplay_cache["ts"] = now
+                _airplay_cache["error"] = None
+            else:
+                _airplay_cache["error"] = air_err or air_out or f"airplay failed ({air_rc})"
+                if not outputs:
+                    snap["output_error"] = _airplay_cache["error"]
+        selected = [d["name"] for d in outputs if d.get("selected")]
+        snap["outputs"] = outputs
+        snap["selected_outputs"] = selected
+        snap["whole_house"] = len(selected) > 1
+        if _airplay_cache.get("error") and "output_error" not in snap:
+            snap["output_error"] = _airplay_cache["error"]
+        return snap
+
+
+@app.get("/music/status")
+async def music_status():
+    return await _music_snapshot()
+
 
 @app.post("/music/play")
 async def music_play():
-    _osascript('tell application "Music" to play')
-    return {"status": "playing"}
+    out, err, rc = await _osascript_async(_MUSIC_PLAY_SCRIPT)
+    snap = await _music_snapshot()
+    snap["status"] = "playing" if rc == 0 else "error"
+    if rc != 0:
+        snap["ok"] = False
+        snap["error"] = err or out or f"play failed ({rc})"
+    return snap
+
 
 @app.post("/music/pause")
 async def music_pause():
-    _osascript('tell application "Music" to pause')
-    return {"status": "paused"}
+    out, err, rc = await _osascript_async('tell application "Music" to pause')
+    snap = await _music_snapshot()
+    snap["status"] = "paused" if rc == 0 else "error"
+    if rc != 0:
+        snap["ok"] = False
+        snap["error"] = err or out or f"pause failed ({rc})"
+    return snap
+
 
 @app.post("/music/playpause")
 async def music_playpause():
-    _osascript('tell application "Music" to playpause')
-    return {"status": "toggled"}
+    out, err, rc = await _osascript_async('tell application "Music" to playpause')
+    snap = await _music_snapshot()
+    snap["status"] = "toggled" if rc == 0 else "error"
+    if rc != 0:
+        snap["ok"] = False
+        snap["error"] = err or out or f"playpause failed ({rc})"
+    return snap
+
 
 @app.post("/music/next")
 async def music_next():
-    _osascript('tell application "Music" to next track')
-    return {"status": "next"}
+    out, err, rc = await _osascript_async('tell application "Music" to next track')
+    snap = await _music_snapshot()
+    snap["status"] = "next" if rc == 0 else "error"
+    if rc != 0:
+        snap["ok"] = False
+        snap["error"] = err or out or f"next failed ({rc})"
+    return snap
+
 
 @app.post("/music/prev")
 async def music_prev():
-    _osascript('tell application "Music" to previous track')
-    return {"status": "prev"}
+    out, err, rc = await _osascript_async('tell application "Music" to previous track')
+    snap = await _music_snapshot()
+    snap["status"] = "prev" if rc == 0 else "error"
+    if rc != 0:
+        snap["ok"] = False
+        snap["error"] = err or out or f"prev failed ({rc})"
+    return snap
+
 
 @app.post("/music/shuffle")
 async def music_shuffle():
-    current = _osascript('tell application "Music" to get shuffle enabled')
-    new_val = "false" if current.lower() == "true" else "true"
-    _osascript(f'tell application "Music" to set shuffle enabled to {new_val}')
-    return {"status": "shuffled", "shuffle": new_val}
+    current_out, _, _ = await _osascript_async('tell application "Music" to get shuffle enabled')
+    new_val = "false" if current_out.lower() == "true" else "true"
+    out, err, rc = await _osascript_async(
+        f'tell application "Music" to set shuffle enabled to {new_val}'
+    )
+    snap = await _music_snapshot()
+    snap["status"] = "shuffled" if rc == 0 else "error"
+    if rc != 0:
+        snap["ok"] = False
+        snap["error"] = err or out or f"shuffle failed ({rc})"
+    return snap
+
 
 @app.post("/music/volume")
 async def music_volume(payload: dict):
     vol = max(0, min(100, int(payload.get("volume", 50))))
-    _osascript(f'tell application "Music" to set sound volume to {vol}')
-    return {"status": "volume_set", "volume": vol}
+    out, err, rc = await _osascript_async(
+        f'tell application "Music" to set sound volume to {vol}'
+    )
+    snap = await _music_snapshot()
+    snap["status"] = "volume_set" if rc == 0 else "error"
+    snap["volume"] = vol if rc == 0 else snap.get("volume", vol)
+    if rc != 0:
+        snap["ok"] = False
+        snap["error"] = err or out or f"volume failed ({rc})"
+    return snap
 
-@app.get("/music/status")
-async def music_status():
-    try:
-        track   = _osascript('tell application "Music" to get name of current track')
-        artist  = _osascript('tell application "Music" to get artist of current track')
-        state   = _osascript('tell application "Music" to get player state as string')
-        vol     = _osascript('tell application "Music" to get sound volume')
-        shuffle = _osascript('tell application "Music" to get shuffle enabled')
-        return {
-            "track": track or "Unknown",
-            "artist": artist or "Unknown",
-            "state": state.upper() if state else "STOPPED",
-            "volume": int(vol) if vol.isdigit() else 50,
-            "shuffle": shuffle.lower() == "true"
-        }
-    except Exception as e:
-        return {"track": "Not playing", "artist": "Apple Music", "state": "STOPPED", "volume": 50, "shuffle": False}
 
 @app.get("/music/playlists")
 async def music_playlists():
-    try:
-        raw = _osascript('tell application "Music" to get name of every playlist')
-        names = [n.strip() for n in raw.split(",") if n.strip()]
-        return {"playlists": names}
-    except Exception as e:
-        return {"playlists": []}
+    out, err, rc = await _osascript_async('tell application "Music" to get name of every playlist')
+    if rc != 0:
+        return {"playlists": [], "ok": False, "error": err or out or f"playlists failed ({rc})"}
+    names = [n.strip() for n in out.split(",") if n.strip()]
+    return {"playlists": names, "ok": True}
+
 
 @app.post("/music/playlist")
 async def music_play_playlist(payload: dict):
-    name = payload.get("name", "")
+    name = (payload.get("name") or "").strip()
     if not name:
-        return {"status": "error", "message": "No playlist name provided"}
-    _osascript(f'tell application "Music" to play playlist "{name}"')
-    return {"status": "playing_playlist", "playlist": name}
+        snap = await _music_snapshot()
+        snap["ok"] = False
+        snap["status"] = "error"
+        snap["error"] = "No playlist name provided"
+        return snap
+    script = f'tell application "Music" to play playlist "{_as_escape(name)}"'
+    out, err, rc = await _osascript_async(script)
+    snap = await _music_snapshot()
+    snap["status"] = "playing_playlist" if rc == 0 else "error"
+    snap["playlist"] = name
+    if rc != 0:
+        snap["ok"] = False
+        snap["error"] = err or out or f"playlist play failed ({rc})"
+    return snap
+
+
+@app.get("/music/outputs")
+async def music_outputs():
+    snap = await _music_snapshot()
+    return {
+        "ok": snap.get("ok", True),
+        "outputs": snap.get("outputs", []),
+        "selected_outputs": snap.get("selected_outputs", []),
+        "whole_house": snap.get("whole_house", False),
+        "error": snap.get("output_error") or snap.get("error"),
+    }
+
+
+@app.post("/music/output")
+async def music_set_output(payload: dict):
+    """Route Music to one AirPlay target, or whole_house=true for every room."""
+    whole = bool(payload.get("whole_house") or str(payload.get("name") or "").strip().upper() in {
+        "WHOLE HOUSE", "WHOLE_HOUSE", "HOUSE",
+    })
+    name = (payload.get("name") or "").strip()
+    _airplay_cache["ts"] = 0.0
+    if whole:
+        out, err, rc = await _osascript_async(_MUSIC_WHOLE_HOUSE_SCRIPT)
+    elif not name:
+        snap = await _music_snapshot()
+        snap["ok"] = False
+        snap["status"] = "error"
+        snap["error"] = "No output name provided"
+        return snap
+    else:
+        script = f'''
+tell application "Music"
+  set selected of every AirPlay device to false
+  set selected of (every AirPlay device whose name is "{_as_escape(name)}") to true
+end tell
+'''
+        out, err, rc = await _osascript_async(script)
+    snap = await _music_snapshot()
+    snap["status"] = "output_set" if rc == 0 else "error"
+    if rc != 0:
+        snap["ok"] = False
+        snap["error"] = err or out or f"output failed ({rc})"
+    return snap
+
+
+@app.post("/music/whole-house")
+async def music_whole_house():
+    """Play Apple Music across every available AirPlay room in the house."""
+    _airplay_cache["ts"] = 0.0
+    out, err, rc = await _osascript_async(_MUSIC_WHOLE_HOUSE_SCRIPT)
+    play_out, play_err, play_rc = await _osascript_async(_MUSIC_PLAY_SCRIPT)
+    snap = await _music_snapshot()
+    if rc != 0 or play_rc != 0:
+        snap["ok"] = False
+        snap["status"] = "error"
+        snap["error"] = err or play_err or out or play_out or "whole-house failed"
+    else:
+        snap["status"] = "whole_house"
+    return snap
+
+
+@app.get("/keys")
+async def keys_status():
+    """Link lamps only. Never returns secret values. Never reads or writes .env."""
+    return _links_status()
+
+
+@app.post("/keys")
+@app.post("/keys/activate")
+async def keys_activate(payload: dict):
+    """Drop one key into macOS Keychain and activate that link. No .env."""
+    link_id = str(payload.get("link") or payload.get("id") or "").strip().lower()
+    secret = str(payload.get("key") or payload.get("secret") or "").strip()
+    if link_id not in _LINKS:
+        snap = _links_status()
+        snap["ok"] = False
+        snap["error"] = (
+            "Unknown link. Use nvidia, nebius, or ollama — Brockston's lanes. "
+            "The word-ear takes no key: it is local whisper.cpp. "
+            "Opus 5 is family — no key."
+        )
+        return snap
+    if not secret:
+        snap = _links_status()
+        snap["ok"] = False
+        snap["error"] = "Drop box was empty"
+        return snap
+    ok, err = _keychain_set(link_id, secret)
+    if not ok:
+        snap = _links_status()
+        snap["ok"] = False
+        snap["error"] = err or "Keychain refused the drop"
+        return snap
+    _link_apply_runtime(link_id, secret)
+    logger.info("[LINK] activated %s", link_id)
+    snap = _links_status()
+    snap["activated"] = link_id
+    return snap
 
 @app.get("/health")
 async def health():
-    ws = whisper_status()
+    ear = porch_status()
     h = {
-        "status": "alive" if ws["ready"] else ("loading" if ws["loading"] else "alive"),
+        "status": "alive" if ear.get("ok") else "alive",
         "bridge": "Christman Full Sensory",
-        "whisper": ws,
+        "ear": ear,
+        # Was hardcoded False. It contradicted the machine: whisper-cli and
+        # ggml-small.en.bin were both on disk the whole time. A hardcoded status
+        # field is a claim nobody measures — Rule 3.
+        "whisper": bool(ear.get("whisper")),
+        "keyless": True,
         "mic_clients": active_connections["mic"],
         "vision_clients": active_connections["vision"],
         "carbon_clients": active_connections["carbon"],
         "brockston_clients": active_connections["brockston"],
         "brockston_live": _brockston_live_status(),
         "riley_connected": active_connections["riley"] > 0,
+        "derek_connected": active_connections.get("derek", 0) > 0,
+        "opus5_connected": active_connections.get("opus5", 0) > 0,
+        "grok_connected": active_connections.get("grok", 0) > 0,
+        "opus5_key_required": False,
         "reactive": True,
         "brain": {
             "integrated": BRAIN_OK,

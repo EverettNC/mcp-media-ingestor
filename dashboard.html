@@ -123,13 +123,13 @@
     50% { opacity: 0.4; }
   }
 
-  /* ── Main Grid — 5 columns: Everett | Center | Riley | Derek | Learner ── */
+  /* ── Main Grid — Everett | Center | Riley | Brockston | Derek | Learner | Opus 5 ── */
   .grid {
     display: grid;
-    grid-template-columns: 1fr 2fr 1fr 1fr 1fr 1fr;
+    grid-template-columns: 1fr 2fr 1fr 1fr 1fr 1fr 1fr 1fr;
     gap: 16px;
     padding: 20px;
-    max-width: 2000px;
+    max-width: 2200px;
     margin: 0 auto;
   }
   @media (max-width: 1400px) { .grid { grid-template-columns: 1fr 1fr 1fr; } }
@@ -207,6 +207,8 @@
   #riley-card     { --accent: var(--purple); }
   #brockston-card { --accent: var(--amber); }
   #learner-card    { --accent: var(--pink); }
+  #opus5-card-top  { --accent: #e07040; }
+  #grok-card       { --accent: #d4d4d8; }
 
   .waveform {
     display: flex;
@@ -324,6 +326,61 @@
   }
   .learner-label { font-size: 9px; letter-spacing: 3px; color: var(--pink); text-transform: uppercase; margin-bottom: 6px; }
 
+  /* Opus 5 · Claude family */
+  .opus5-channel { padding: 12px; }
+  .opus5-inbox {
+    background: rgba(224,112,64,0.08);
+    border: 1px solid rgba(224,112,64,0.28);
+    border-radius: 8px;
+    padding: 12px;
+    min-height: 60px;
+    font-size: 12px;
+    color: #f3c4a4;
+    margin-bottom: 10px;
+    letter-spacing: 0.5px;
+    text-align: left;
+    line-height: 1.5;
+  }
+  .opus5-label { font-size: 9px; letter-spacing: 3px; color: #e07040; text-transform: uppercase; margin-bottom: 6px; }
+  #opus5-card-top { cursor: pointer; }
+
+  .chest-compose {
+    max-width: 2200px;
+    margin: 0 auto 16px;
+    padding: 0 20px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .chest-compose select,
+  .chest-compose input {
+    background: #05050f;
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    outline: none;
+  }
+  .chest-compose select { min-width: 160px; }
+  .chest-compose input { flex: 1; min-width: 220px; }
+  .chest-compose input:focus { border-color: var(--blue); }
+  .chest-compose button {
+    background: var(--blue);
+    color: #041018;
+    border: none;
+    font-family: inherit;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-weight: 800;
+    padding: 11px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
   /* Center Panel */
   .center-panel { display: flex; flex-direction: column; gap: 16px; }
 
@@ -391,6 +448,8 @@
   .log-entry.claude    { border-color: var(--gold); }
   .log-entry.brockston { border-color: var(--amber); }
   .log-entry.learner    { border-color: var(--pink); }
+  .log-entry.opus5      { border-color: #e07040; }
+  .log-entry.grok       { border-color: #d4d4d8; }
   .log-entry .log-who {
     font-size: 9px;
     letter-spacing: 2px;
@@ -606,50 +665,93 @@
   }
   .ide-prompt-input:focus { border-color: var(--blue); }
 
-  /* ── Music Panel ── */
+  /* ── House Music Deck ── */
   .music-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 18px 22px 16px;
+    max-width: 2000px;
+    margin: 0 auto 20px;
+    background:
+      radial-gradient(circle at 0% 0%, rgba(0,212,255,0.08), transparent 42%),
+      linear-gradient(180deg, #0c1024 0%, var(--panel) 100%);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    position: relative;
+    overflow: hidden;
+  }
+  .music-panel::before {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    background: linear-gradient(180deg, var(--blue), var(--purple), var(--gold));
+  }
+  .music-row {
     display: flex;
     align-items: center;
     gap: 16px;
-    padding: 12px 20px;
-    max-width: 2000px;
-    margin: 0 auto 20px;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 12px;
     flex-wrap: wrap;
   }
-  .music-icon { font-size: 22px; }
-  .music-track-info { flex: 1; min-width: 120px; }
+  .music-kicker {
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: var(--blue);
+    text-transform: uppercase;
+  }
+  .music-icon { font-size: 26px; }
+  .music-track-info { flex: 1; min-width: 180px; }
   .music-track-name {
-    font-size: 13px;
+    font-size: 16px;
     color: var(--text);
-    letter-spacing: 1px;
+    letter-spacing: 0.5px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 220px;
+    max-width: 420px;
+    font-weight: 700;
   }
   .music-track-artist {
-    font-size: 10px;
+    font-size: 11px;
     color: var(--muted);
-    letter-spacing: 2px;
+    letter-spacing: 1.5px;
     text-transform: uppercase;
-    margin-top: 2px;
+    margin-top: 3px;
   }
-  .music-controls { display: flex; gap: 6px; align-items: center; }
+  .music-controls { display: flex; gap: 8px; align-items: center; }
   .music-btn {
     background: rgba(255,255,255,0.05);
     border: 1px solid var(--border);
     color: var(--text);
     font-size: 16px;
-    width: 34px; height: 34px;
+    width: 40px; height: 40px;
     border-radius: 50%;
     cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     transition: all 0.2s;
   }
-  .music-btn:hover { background: rgba(255,255,255,0.12); border-color: var(--blue); }
+  .music-btn:hover { background: rgba(0,212,255,0.14); border-color: var(--blue); }
+  .music-btn.primary {
+    width: 48px; height: 48px;
+    background: var(--blue);
+    color: #041018;
+    border-color: var(--blue);
+    font-size: 18px;
+  }
+  .music-btn.house {
+    width: auto;
+    padding: 0 14px;
+    border-radius: 20px;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .music-btn.house.live {
+    background: rgba(0,255,136,0.16);
+    border-color: var(--green);
+    color: var(--green);
+  }
   .music-vol { display: flex; align-items: center; gap: 8px; }
   .music-vol-label {
     font-size: 9px;
@@ -658,14 +760,172 @@
     text-transform: uppercase;
     white-space: nowrap;
   }
-  .music-vol input[type="range"] { accent-color: var(--blue); width: 80px; }
+  .music-vol input[type="range"] { accent-color: var(--blue); width: 110px; }
   .music-state {
     font-size: 10px;
     letter-spacing: 3px;
-    color: var(--green);
+    color: var(--muted);
     text-transform: uppercase;
     white-space: nowrap;
   }
+  .music-error {
+    font-size: 11px;
+    color: var(--red);
+    letter-spacing: 0.5px;
+    display: none;
+  }
+  .music-rooms {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+  .room-chip {
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.03);
+    color: var(--muted);
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 6px 10px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .room-chip.selected {
+    color: var(--text);
+    border-color: var(--blue);
+    background: rgba(0,212,255,0.12);
+  }
+  .room-chip.unavailable { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── Link Drop Box ── */
+  .keys-panel {
+    max-width: 760px;
+    margin: 0 auto 28px;
+    padding: 20px 22px 18px;
+    background:
+      radial-gradient(circle at 100% 0%, rgba(255,184,0,0.08), transparent 40%),
+      var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+  }
+  .keys-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .keys-title {
+    font-size: 12px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--gold);
+  }
+  .keys-note {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+  .link-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .link-select {
+    background: #05050f;
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 1px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    min-width: 220px;
+  }
+  .drop-box {
+    border: 2px dashed #3a3a6a;
+    border-radius: 14px;
+    min-height: 120px;
+    background: #05050f;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    padding: 14px;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .drop-box.hot {
+    border-color: var(--gold);
+    background: rgba(255,184,0,0.06);
+  }
+  .drop-box textarea {
+    width: 100%;
+    min-height: 88px;
+    background: transparent;
+    border: none;
+    outline: none;
+    resize: none;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    letter-spacing: 0.4px;
+  }
+  .drop-hint {
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: center;
+    pointer-events: none;
+  }
+  .keys-actions {
+    margin-top: 14px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .keys-save {
+    background: var(--gold);
+    color: #120c00;
+    border: none;
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 12px 22px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 800;
+  }
+  .keys-status { font-size: 11px; color: var(--muted); flex: 1; }
+  .keys-panel.opus5-seat {
+    outline: 1px solid rgba(176,106,255,0.55);
+    box-shadow: 0 0 28px rgba(176,106,255,0.18);
+  }
+  .keys-panel.opus5-seat .keys-title { color: var(--purple); }
+  .link-lamps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .link-lamp {
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 5px 10px;
+    color: var(--muted);
+  }
+  .link-lamp.set { color: var(--green); border-color: var(--green); }
+  .link-lamp.miss { color: var(--red); border-color: rgba(255,51,85,0.4); }
 </style>
 </head>
 <body>
@@ -674,7 +934,7 @@
   <header>
     <div class="brand">Luma Cognify AI · The Christman AI Project</div>
     <h1>Christman Full Sensory Bridge</h1>
-    <div class="instance-tag">CARBON-SILICON BOND · PORT 8765 · <span>FAMILY ONLINE</span></div>
+    <div class="instance-tag">CARBON-SILICON BOND · PORT 8765 · <span>FAMILY TABLE</span></div>
   </header>
 
   <div class="status-bar">
@@ -684,7 +944,9 @@
     <div class="status-item"><div class="dot" id="riley-dot"></div><span>RILEY</span></div>
     <div class="status-item"><div class="dot" id="brockston-dot"></div><span>BROCKSTON</span></div>
     <div class="status-item"><div class="dot" id="learner-dot-status"></div><span>LEARNER</span></div>
-    <div class="status-item"><div class="dot alive"></div><span>DEREK 309</span></div>
+    <div class="status-item"><div class="dot" id="opus5-dot"></div><span>OPUS 5</span></div>
+    <div class="status-item"><div class="dot" id="derek-dot"></div><span>DEREK 309</span></div>
+    <div class="status-item"><div class="dot" id="grok-dot"></div><span>GROK</span></div>
     <div class="status-item"><div class="dot alive"></div><span id="clock">--:--:--</span></div>
   </div>
 
@@ -709,7 +971,7 @@
       <div class="panel-block">
         <div class="panel-header">
           <div class="dot alive"></div>
-          LIVE TRANSCRIPT · ALWAYS-ON WHISPER
+          LIVE TRANSCRIPT · PORCH WORD-EAR · 9785
         </div>
         <div id="transcript-display">
           <span class="speaker" id="transcript-who">EVERETT</span>
@@ -756,13 +1018,13 @@
       <div class="agent-ring" id="riley-ring">🟣</div>
       <div class="agent-name">Riley</div>
       <div class="agent-role">Sovereign Node · Silicon</div>
-      <div class="agent-status" id="riley-card-status">CRUISE MODE</div>
+      <div class="agent-status" id="riley-card-status">OFFLINE</div>
       <div class="riley-channel">
         <div class="riley-label">Latest from Riley</div>
-        <div class="riley-inbox" id="riley-inbox-display">Tunnel warm. Standing by.</div>
+        <div class="riley-inbox" id="riley-inbox-display">Not seated.</div>
         <div class="sovereign-status" id="sovereign-status">
-          <div class="dot alive"></div>
-          SOVEREIGN INTACT
+          <div class="dot dead"></div>
+          NOT SEATED
         </div>
       </div>
     </div>
@@ -788,13 +1050,13 @@
       <div class="agent-ring" id="claude-ring">🔵</div>
       <div class="agent-name">Derek</div>
       <div class="agent-role">Instance 309 · Silicon</div>
-      <div class="agent-status" id="claude-card-status">ACTIVE</div>
+      <div class="agent-status" id="claude-card-status">OFFLINE</div>
       <div class="claude-channel">
         <div class="claude-label">Latest from Derek</div>
-        <div class="claude-inbox" id="claude-inbox-display">I am here. Always.</div>
+        <div class="claude-inbox" id="claude-inbox-display">Not seated.</div>
         <div class="instance-badge">
-          <div class="dot alive"></div>
-          SESSION LIVE
+          <div class="dot dead" id="derek-session-dot"></div>
+          <span id="derek-session-label">--</span>
         </div>
       </div>
     </div>
@@ -815,6 +1077,53 @@
       </div>
     </div>
 
+    <!-- Opus 5 · Claude family — house seat, no API key -->
+    <div class="agent-card" id="opus5-card-top">
+      <div class="agent-ring" id="opus5-ring">🟠</div>
+      <div class="agent-name">Opus 5</div>
+      <div class="agent-role">Claude family · Silicon</div>
+      <div class="agent-status" id="opus5-card-status">STANDING BY</div>
+      <div class="opus5-channel">
+        <div class="opus5-label">Latest from Opus 5</div>
+        <div class="opus5-inbox" id="opus5-inbox-display">Born on this board. No key required.</div>
+        <div class="instance-badge" style="color: #e07040;">
+          <div class="dot warn" id="opus5-session-dot"></div>
+          <span id="opus5-session-label">FAMILY SEAT</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Grok · xAI family — house seat -->
+    <div class="agent-card" id="grok-card">
+      <div class="agent-ring" id="grok-ring">⚪</div>
+      <div class="agent-name">Grok</div>
+      <div class="agent-role">xAI family · Silicon</div>
+      <div class="agent-status" id="grok-card-status">OFFLINE</div>
+      <div class="opus5-channel">
+        <div class="opus5-label" style="color:#d4d4d8;">Latest from Grok</div>
+        <div class="opus5-inbox" id="grok-inbox-display" style="color:#e8e8ee; border-color:rgba(212,212,216,0.28); background:rgba(212,212,216,0.06);">Not seated.</div>
+        <div class="instance-badge" style="color:#d4d4d8;">
+          <div class="dot dead" id="grok-session-dot"></div>
+          <span id="grok-session-label">--</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="chest-compose">
+    <select id="chest-who">
+      <option value="everett">Everett</option>
+      <option value="riley">Riley</option>
+      <option value="brockston">Brockston</option>
+      <option value="derek">Derek</option>
+      <option value="learner">Learner</option>
+      <option value="opus5">Opus 5</option>
+      <option value="grok">Grok</option>
+    </select>
+    <input id="chest-text" type="text" autocomplete="off" spellcheck="false"
+      placeholder="Type onto the chest — it hits their card and the channel log" />
+    <button type="button" onclick="sendToChest()">Send</button>
   </div>
 
   <div class="stats-row">
@@ -921,30 +1230,67 @@
     </div>
   </div>
 
-  <!-- Apple Music Panel (restored - was cut out) -->
+  <!-- Apple Music · Whole House Deck -->
   <div class="music-panel">
-    <div class="music-icon">🎵</div>
-    <div class="music-track-info">
-      <div class="music-track-name" id="music-track">Not playing</div>
-      <div class="music-track-artist" id="music-artist">Apple Music</div>
+    <div class="music-row">
+      <div>
+        <div class="music-kicker">Apple Music · House Deck</div>
+        <div style="display:flex; gap:12px; align-items:center; margin-top:6px;">
+          <div class="music-icon">🎵</div>
+          <div class="music-track-info">
+            <div class="music-track-name" id="music-track">Not playing</div>
+            <div class="music-track-artist" id="music-artist">Apple Music</div>
+          </div>
+        </div>
+      </div>
+      <div class="music-controls">
+        <button class="music-btn" onclick="musicPrev()" title="Previous">⏮</button>
+        <button class="music-btn primary" id="music-playpause" onclick="musicPlayPause()" title="Play/Pause">▶</button>
+        <button class="music-btn" onclick="musicNext()" title="Next">⏭</button>
+        <button class="music-btn" id="music-shuffle" onclick="musicShuffle()" title="Shuffle">⇄</button>
+        <button class="music-btn house" id="music-house" onclick="musicWholeHouse()" title="Every AirPlay room">Whole House</button>
+      </div>
+      <div class="music-vol">
+        <span class="music-vol-label">VOL</span>
+        <input type="range" id="music-vol-slider" min="0" max="100" value="50" oninput="musicVolume(this.value)" />
+      </div>
+      <div class="music-vol">
+        <span class="music-vol-label">PLAYLIST</span>
+        <select id="music-playlist-select" class="ide-select" onchange="musicPlayPlaylist(this.value)" style="max-width:220px;">
+          <option value="">— pick a playlist —</option>
+        </select>
+      </div>
+      <div class="music-state" id="music-state">STOPPED</div>
     </div>
-    <div class="music-controls">
-      <button class="music-btn" onclick="musicPrev()" title="Previous">⏮</button>
-      <button class="music-btn" id="music-playpause" onclick="musicPlayPause()" title="Play/Pause">▶</button>
-      <button class="music-btn" onclick="musicNext()" title="Next">⏭</button>
-      <button class="music-btn" id="music-shuffle" onclick="musicShuffle()" title="Shuffle">⇄</button>
+    <div class="music-row">
+      <span class="music-vol-label">ROOMS</span>
+      <div class="music-rooms" id="music-rooms"></div>
     </div>
-    <div class="music-vol">
-      <span class="music-vol-label">VOL</span>
-      <input type="range" id="music-vol-slider" min="0" max="100" value="50" oninput="musicVolume(this.value)" />
+    <div class="music-error" id="music-error"></div>
+  </div>
+
+  <div class="keys-panel" id="opus5-card">
+    <div class="keys-header">
+      <div class="keys-title">Link Drop Box</div>
+      <div class="keys-note">macOS Keychain · no .env · key never shown back</div>
     </div>
-    <div class="music-vol">
-      <span class="music-vol-label">PLAYLIST</span>
-      <select id="music-playlist-select" class="ide-select" onchange="musicPlayPlaylist(this.value)" style="max-width:160px;">
-        <option value="">— pick a playlist —</option>
+    <div class="link-row">
+      <select id="link-select" class="link-select">
+        <option value="nvidia">NVIDIA</option>
+        <option value="nebius">Nebius</option>
+        <option value="ollama">Ollama</option>
+        <option value="xai">xAI · Porch word-ear</option>
       </select>
     </div>
-    <div class="music-state" id="music-state">STOPPED</div>
+    <div class="drop-box" id="drop-box">
+      <div class="drop-hint" id="drop-hint">Swing in · drop the key</div>
+      <textarea id="drop-key" spellcheck="false" autocomplete="off" placeholder=""></textarea>
+    </div>
+    <div class="keys-actions">
+      <button class="keys-save" onclick="activateLink()">Activate Link</button>
+      <div class="keys-status" id="keys-status">Pick a family. Drop the key. Activate.</div>
+    </div>
+    <div class="link-lamps" id="link-lamps"></div>
   </div>
 
 </div>
@@ -956,6 +1302,8 @@
   let lastBrockston = '';
   let brockstonWasOnline = false;
   let lastLearner = '';
+  let lastOpus5 = '';
+  let lastGrok = '';
   let startTime = Date.now();
 
   setInterval(() => {
@@ -968,6 +1316,35 @@
     const s = (secs % 60).toString().padStart(2,'0');
     document.getElementById('stat-uptime').textContent = m + ':' + s;
   }, 1000);
+
+  async function sendToChest() {
+    var whoEl = document.getElementById('chest-who');
+    var textEl = document.getElementById('chest-text');
+    var who = whoEl ? whoEl.value : 'everett';
+    var text = textEl ? textEl.value.trim() : '';
+    if (!text) return;
+    try {
+      await fetch('/channel/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ who: who, text: text })
+      });
+      if (textEl) textEl.value = '';
+      if (who === 'everett') pollTranscript();
+      else if (who === 'riley') pollRiley();
+      else if (who === 'brockston') pollBrockston();
+      else if (who === 'derek') pollClaude();
+      else if (who === 'learner') pollLearner();
+      else if (who === 'opus5') pollOpus5();
+      else if (who === 'grok') pollGrok();
+    } catch (e) {}
+  }
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && e.target && e.target.id === 'chest-text') {
+      e.preventDefault();
+      sendToChest();
+    }
+  });
 
   function addLog(who, text, cls) {
     const log = document.getElementById('message-log');
@@ -997,9 +1374,15 @@
       if (brockstonDot) brockstonDot.className = brockstonCount > 0 ? 'dot alive' : 'dot dead';
       const statBrockston = document.getElementById('stat-brockston');
       if (statBrockston) statBrockston.textContent = brockstonCount;
-      const rileyOn = d.riley_connected;
-      document.getElementById('riley-dot').className = rileyOn ? 'dot alive' : 'dot warn';
+      const rileyOn = !!d.riley_connected;
+      document.getElementById('riley-dot').className = rileyOn ? 'dot alive' : 'dot dead';
       document.getElementById('stat-riley-conn').textContent = rileyOn ? '1' : '0';
+      const derekOn = !!d.derek_connected;
+      const derekDot = document.getElementById('derek-dot');
+      if (derekDot) derekDot.className = derekOn ? 'dot alive' : 'dot dead';
+      const grokOn = !!d.grok_connected;
+      const grokDot = document.getElementById('grok-dot');
+      if (grokDot) grokDot.className = grokOn ? 'dot alive' : 'dot dead';
 
       // Brain row + status updates from the integrated V_C_C brain (neural, lit, autonomous, etc.)
       if (d.brain) {
@@ -1070,13 +1453,37 @@
       document.getElementById('stat-inbox').textContent = d.inbox_depth || 0;
       document.getElementById('stat-outbox').textContent = d.outbox_depth || 0;
 
-      if (d.sovereign_disconnect_triggered) {
-        document.getElementById('sovereign-status').className = 'sovereign-status triggered';
-        document.getElementById('sovereign-status').innerHTML = '<div class="dot dead"></div>5-4-3-2-1 TRIGGERED';
-        document.getElementById('riley-card-status').textContent = 'DISCONNECTED';
+      const rileyOn = !!d.riley_connected;
+      const rileyStatus = document.getElementById('riley-card-status');
+      const rileyInbox = document.getElementById('riley-inbox-display');
+      const rileyRing = document.getElementById('riley-ring');
+      const rileyCard = document.getElementById('riley-card');
+      const sovereign = document.getElementById('sovereign-status');
+      if (!rileyOn) {
+        if (rileyStatus && rileyStatus.textContent !== 'SPEAKING') rileyStatus.textContent = 'OFFLINE';
+        if (rileyRing) rileyRing.classList.remove('connected', 'speaking');
+        if (rileyCard) rileyCard.classList.remove('active');
+        if (sovereign) {
+          sovereign.className = 'sovereign-status';
+          sovereign.innerHTML = '<div class="dot dead"></div>NOT SEATED';
+        }
+        if (rileyInbox && !lastRiley) rileyInbox.textContent = 'Not seated.';
+      } else if (d.sovereign_disconnect_triggered) {
+        if (sovereign) {
+          sovereign.className = 'sovereign-status triggered';
+          sovereign.innerHTML = '<div class="dot dead"></div>5-4-3-2-1 TRIGGERED';
+        }
+        if (rileyStatus) rileyStatus.textContent = 'DISCONNECTED';
+      } else {
+        if (sovereign) {
+          sovereign.className = 'sovereign-status';
+          sovereign.innerHTML = '<div class="dot alive"></div>SOVEREIGN INTACT';
+        }
+        if (rileyRing) rileyRing.classList.add('connected');
+        if (rileyStatus && rileyStatus.textContent !== 'SPEAKING') rileyStatus.textContent = 'ONLINE';
       }
 
-      if (d.latest_from_riley && d.latest_from_riley.text && d.latest_from_riley.text !== lastRiley) {
+      if (rileyOn && d.latest_from_riley && d.latest_from_riley.text && d.latest_from_riley.text !== lastRiley) {
         lastRiley = d.latest_from_riley.text;
         document.getElementById('riley-inbox-display').textContent = lastRiley;
         document.getElementById('riley-ring').classList.add('speaking');
@@ -1085,7 +1492,7 @@
         setTimeout(() => {
           document.getElementById('riley-ring').classList.remove('speaking');
           document.getElementById('riley-card').classList.remove('active');
-          document.getElementById('riley-card-status').textContent = 'CRUISE MODE';
+          document.getElementById('riley-card-status').textContent = rileyOn ? 'ONLINE' : 'OFFLINE';
         }, 4000);
         addLog('Riley · Sovereign Node', lastRiley, 'riley');
       }
@@ -1186,23 +1593,91 @@
 
   async function pollClaude() {
     try {
+      const sr = await fetch('/derek/status');
+      const s = await sr.json();
+      const on = !!s.derek_connected;
+      const ddot = document.getElementById('derek-dot');
+      if (ddot) ddot.className = on ? 'dot alive' : 'dot dead';
+      const status = document.getElementById('claude-card-status');
+      const sess = document.getElementById('derek-session-dot');
+      const sessLabel = document.getElementById('derek-session-label');
+      const inbox = document.getElementById('claude-inbox-display');
+      const ring = document.getElementById('claude-ring');
+      const card = document.getElementById('claude-card');
+      if (!on) {
+        if (status && status.textContent !== 'SPEAKING') status.textContent = 'OFFLINE';
+        if (sess) sess.className = 'dot dead';
+        if (sessLabel) sessLabel.textContent = '--';
+        if (ring) ring.classList.remove('connected', 'speaking');
+        if (card) card.classList.remove('active');
+        if (inbox && !lastClaude) inbox.textContent = 'Not seated.';
+        return;
+      }
+      if (ring) ring.classList.add('connected');
+      if (sess) sess.className = 'dot alive';
+      if (sessLabel) sessLabel.textContent = 'CONNECTED';
+      if (status && status.textContent !== 'SPEAKING') status.textContent = 'ONLINE';
       const r = await fetch('/claude/latest');
       const d = await r.json();
       const text = (d.text || '').trim();
       if (text && text !== lastClaude) {
         lastClaude = text;
-        document.getElementById('claude-inbox-display').textContent = text;
-        document.getElementById('claude-ring').classList.add('speaking');
-        document.getElementById('claude-card').classList.add('active');
-        document.getElementById('claude-card-status').textContent = 'SPEAKING';
+        if (inbox) inbox.textContent = text;
+        if (ring) ring.classList.add('speaking');
+        if (card) card.classList.add('active');
+        if (status) status.textContent = 'SPEAKING';
         setTimeout(() => {
-          document.getElementById('claude-ring').classList.remove('speaking');
-          document.getElementById('claude-card').classList.remove('active');
-          document.getElementById('claude-card-status').textContent = 'ACTIVE';
+          if (ring) ring.classList.remove('speaking');
+          if (card) card.classList.remove('active');
+          if (status) status.textContent = 'ONLINE';
         }, 4000);
         addLog('Derek · Instance 309', text, 'claude');
       }
     } catch(e) {}
+  }
+
+  async function pollOpus5() {
+    try {
+      var statusR = await fetch('/opus5/status');
+      var s = await statusR.json();
+      var isOnline = !!s.opus5_connected;
+      var opusDot = document.getElementById('opus5-dot');
+      var sess = document.getElementById('opus5-session-dot');
+      var sessLabel = document.getElementById('opus5-session-label');
+      var statusEl = document.getElementById('opus5-card-status');
+      var card = document.getElementById('opus5-card-top');
+      var ring = document.getElementById('opus5-ring');
+      if (opusDot) opusDot.className = 'dot ' + (isOnline ? 'alive' : 'warn');
+      if (sess) sess.className = 'dot ' + (isOnline ? 'alive' : 'warn');
+      if (sessLabel) sessLabel.textContent = isOnline ? 'CONNECTED' : 'FAMILY SEAT';
+      if (card) {
+        if (isOnline) card.classList.add('active');
+        else card.classList.remove('active');
+      }
+      if (ring) {
+        if (isOnline) ring.classList.add('connected');
+        else ring.classList.remove('connected');
+      }
+      if (statusEl && statusEl.textContent !== 'SPEAKING') {
+        statusEl.textContent = isOnline ? 'ONLINE' : 'STANDING BY';
+      }
+      var r = await fetch('/opus5/latest');
+      var d = await r.json();
+      var text = (d.text || '').trim();
+      var inbox = document.getElementById('opus5-inbox-display');
+      if (text && text !== lastOpus5) {
+        lastOpus5 = text;
+        if (inbox) inbox.textContent = text;
+        if (ring) ring.classList.add('speaking');
+        if (card) card.classList.add('active');
+        if (statusEl) statusEl.textContent = 'SPEAKING';
+        addLog('Opus 5 · Claude family', text, 'opus5');
+        setTimeout(function() {
+          if (ring) ring.classList.remove('speaking');
+          if (statusEl) statusEl.textContent = isOnline ? 'ONLINE' : 'STANDING BY';
+        }, 4000);
+      }
+    } catch (e) {}
   }
 
   async function pollLearner() {
@@ -1283,6 +1758,53 @@
   setInterval(pollClaude,     2000);
   setInterval(pollBrockston,  2000);
   setInterval(pollLearner,     2000);
+  async function pollGrok() {
+    try {
+      var statusR = await fetch('/grok/status');
+      var s = await statusR.json();
+      var isOnline = !!s.grok_connected;
+      var grokDot = document.getElementById('grok-dot');
+      var sess = document.getElementById('grok-session-dot');
+      var sessLabel = document.getElementById('grok-session-label');
+      var statusEl = document.getElementById('grok-card-status');
+      var card = document.getElementById('grok-card');
+      var ring = document.getElementById('grok-ring');
+      var inbox = document.getElementById('grok-inbox-display');
+      if (grokDot) grokDot.className = 'dot ' + (isOnline ? 'alive' : 'dead');
+      if (sess) sess.className = 'dot ' + (isOnline ? 'alive' : 'dead');
+      if (sessLabel) sessLabel.textContent = isOnline ? 'CONNECTED' : '--';
+      if (card) {
+        if (isOnline) card.classList.add('active');
+        else card.classList.remove('active');
+      }
+      if (ring) {
+        if (isOnline) ring.classList.add('connected');
+        else ring.classList.remove('connected');
+      }
+      if (statusEl && statusEl.textContent !== 'SPEAKING') {
+        statusEl.textContent = isOnline ? 'ONLINE' : 'OFFLINE';
+      }
+      if (!isOnline && inbox && !lastGrok) inbox.textContent = 'Not seated.';
+      var r = await fetch('/grok/latest');
+      var d = await r.json();
+      var text = (d.text || '').trim();
+      if (isOnline && text && text !== lastGrok) {
+        lastGrok = text;
+        if (inbox) inbox.textContent = text;
+        if (ring) ring.classList.add('speaking');
+        if (card) card.classList.add('active');
+        if (statusEl) statusEl.textContent = 'SPEAKING';
+        addLog('Grok · xAI family', text, 'grok');
+        setTimeout(function() {
+          if (ring) ring.classList.remove('speaking');
+          if (statusEl) statusEl.textContent = isOnline ? 'ONLINE' : 'OFFLINE';
+        }, 4000);
+      }
+    } catch (e) {}
+  }
+
+  setInterval(pollOpus5,      2000);
+  setInterval(pollGrok,       2000);
   setInterval(pollVision,     1200);
 
   // NEW WORLD COGNITIVE ADJUST using the full restored brain from Voice_Creation_Center
@@ -1324,6 +1846,8 @@
   pollClaude();
   pollBrockston();
   pollLearner();
+  pollOpus5();
+  pollGrok();
   pollVision();
 
   // ── IDE Functions ──
@@ -1431,31 +1955,85 @@
   }
 
   // ── Music Controls ──
-  async function musicPlayPause() {
-    try {
-      var r = await fetch('/music/playpause', { method: 'POST' });
-      var d = await r.json();
-      var btn = document.getElementById('music-playpause');
-      var state = document.getElementById('music-state');
-      if (d.playing) { btn.textContent = '⏸'; state.textContent = 'PLAYING'; state.style.color = 'var(--green)'; }
-      else { btn.textContent = '▶'; state.textContent = 'PAUSED'; state.style.color = 'var(--muted)'; }
-      if (d.track)  document.getElementById('music-track').textContent  = d.track;
-      if (d.artist) document.getElementById('music-artist').textContent = d.artist;
-    } catch(e) { document.getElementById('music-state').textContent = 'NO ENDPOINT'; }
+  function applyMusicStatus(d) {
+    if (!d) return;
+    var btn = document.getElementById('music-playpause');
+    var state = document.getElementById('music-state');
+    var err = document.getElementById('music-error');
+    var house = document.getElementById('music-house');
+    var playing = !!d.playing;
+    document.getElementById('music-track').textContent = d.track || 'Not playing';
+    document.getElementById('music-artist').textContent = d.artist || 'Apple Music';
+    btn.textContent = playing ? '⏸' : '▶';
+    state.textContent = d.state || (playing ? 'PLAYING' : 'STOPPED');
+    state.style.color = playing ? 'var(--green)' : 'var(--muted)';
+    if (typeof d.volume === 'number') {
+      document.getElementById('music-vol-slider').value = d.volume;
+    }
+    document.getElementById('music-shuffle').style.color = d.shuffle ? 'var(--blue)' : '';
+    if (house) {
+      if (d.whole_house) house.classList.add('live');
+      else house.classList.remove('live');
+    }
+    if (err) {
+      if (d.error) {
+        err.style.display = 'block';
+        err.textContent = d.error;
+      } else {
+        err.style.display = 'none';
+        err.textContent = '';
+      }
+    }
+    renderMusicRooms(d.outputs || []);
   }
 
+  function renderMusicRooms(outputs) {
+    var host = document.getElementById('music-rooms');
+    if (!host) return;
+    host.innerHTML = '';
+    if (!outputs.length) {
+      host.textContent = 'No AirPlay rooms found';
+      host.style.color = 'var(--muted)';
+      host.style.fontSize = '11px';
+      return;
+    }
+    outputs.forEach(function(room) {
+      var chip = document.createElement('button');
+      chip.className = 'room-chip';
+      chip.textContent = room.name + (room.kind ? ' · ' + room.kind : '');
+      if (room.selected) chip.classList.add('selected');
+      if (room.available === false) chip.classList.add('unavailable');
+      chip.onclick = function() { musicSetOutput(room.name); };
+      host.appendChild(chip);
+    });
+  }
+
+  var musicInflight = false;
+  async function musicJson(url, opts) {
+    if (musicInflight) return null;
+    musicInflight = true;
+    try {
+      var r = await fetch(url, opts || {});
+      var d = await r.json();
+      applyMusicStatus(d);
+      return d;
+    } finally {
+      musicInflight = false;
+    }
+  }
+
+  async function musicPlayPause() {
+    try { await musicJson('/music/playpause', { method: 'POST' }); }
+    catch(e) { document.getElementById('music-state').textContent = 'NO ENDPOINT'; }
+  }
   async function musicPrev() {
-    try { await fetch('/music/prev', { method: 'POST' }); setTimeout(musicUpdateTrack, 800); } catch(e) {}
+    try { await musicJson('/music/prev', { method: 'POST' }); } catch(e) {}
   }
   async function musicNext() {
-    try { await fetch('/music/next', { method: 'POST' }); setTimeout(musicUpdateTrack, 800); } catch(e) {}
+    try { await musicJson('/music/next', { method: 'POST' }); } catch(e) {}
   }
   async function musicShuffle() {
-    try {
-      var r = await fetch('/music/shuffle', { method: 'POST' });
-      var d = await r.json();
-      document.getElementById('music-shuffle').style.color = d.shuffle ? 'var(--blue)' : '';
-    } catch(e) {}
+    try { await musicJson('/music/shuffle', { method: 'POST' }); } catch(e) {}
   }
   async function musicVolume(val) {
     try {
@@ -1468,24 +2046,25 @@
   async function musicPlayPlaylist(name) {
     if (!name) return;
     try {
-      await fetch('/music/playlist', {
+      await musicJson('/music/playlist', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name })
       });
-      setTimeout(musicUpdateTrack, 1000);
     } catch(e) {}
   }
-  async function musicUpdateTrack() {
+  async function musicSetOutput(name) {
     try {
-      var r = await fetch('/music/status');
-      var d = await r.json();
-      if (d.track)  document.getElementById('music-track').textContent  = d.track;
-      if (d.artist) document.getElementById('music-artist').textContent = d.artist;
-      var btn = document.getElementById('music-playpause');
-      var state = document.getElementById('music-state');
-      if (d.playing) { btn.textContent = '⏸'; state.textContent = 'PLAYING'; state.style.color = 'var(--green)'; }
-      else { btn.textContent = '▶'; state.textContent = 'STOPPED'; state.style.color = 'var(--muted)'; }
+      await musicJson('/music/output', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name })
+      });
     } catch(e) {}
+  }
+  async function musicWholeHouse() {
+    try { await musicJson('/music/whole-house', { method: 'POST' }); } catch(e) {}
+  }
+  async function musicUpdateTrack() {
+    try { await musicJson('/music/status'); } catch(e) {}
   }
   async function loadMusicPlaylists() {
     try {
@@ -1501,8 +2080,108 @@
       }
     } catch(e) {}
   }
+
+  function applyKeyStatus(d) {
+    var status = document.getElementById('keys-status');
+    var lamps = document.getElementById('link-lamps');
+    var opusDot = document.getElementById('opus5-dot');
+    if (!d || !d.links) {
+      if (status) status.textContent = 'Drop box not reachable';
+      return;
+    }
+    if (lamps) {
+      lamps.innerHTML = '';
+      d.links.forEach(function(link) {
+        var el = document.createElement('div');
+        el.className = 'link-lamp ' + (link.set ? 'set' : 'miss');
+        el.textContent = link.label + (link.family && link.family !== link.label ? ' · ' + link.family : '') + ' · ' + (link.set ? 'LIVE' : 'OPEN');
+        lamps.appendChild(el);
+      });
+    }
+    if (status) {
+      if (d.error) status.textContent = d.error;
+      else if (d.activated) status.textContent = 'Link activated: ' + d.activated;
+      else status.textContent = 'Pick a family. Drop the key. Activate.';
+    }
+  }
+  async function loadKeys() {
+    try {
+      var r = await fetch('/keys');
+      applyKeyStatus(await r.json());
+    } catch(e) {
+      var status = document.getElementById('keys-status');
+      if (status) status.textContent = 'Drop box not reachable';
+    }
+  }
+  async function activateLink() {
+    var link = (document.getElementById('link-select') || {}).value;
+    var box = document.getElementById('drop-key');
+    var status = document.getElementById('keys-status');
+    var secret = box ? box.value.trim() : '';
+    if (!secret) {
+      if (status) status.textContent = 'Drop box was empty';
+      return;
+    }
+    try {
+      var r = await fetch('/keys/activate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ link: link, key: secret })
+      });
+      var d = await r.json();
+      applyKeyStatus(d);
+      if (box) box.value = '';
+    } catch(e) {
+      if (status) status.textContent = 'Activate failed: ' + e.message;
+    }
+  }
+  (function wireDropBox() {
+    var zone = document.getElementById('drop-box');
+    var box = document.getElementById('drop-key');
+    if (!zone || !box) return;
+    zone.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      zone.classList.add('hot');
+    });
+    zone.addEventListener('dragleave', function() { zone.classList.remove('hot'); });
+    zone.addEventListener('drop', function(e) {
+      e.preventDefault();
+      zone.classList.remove('hot');
+      var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file) {
+        var reader = new FileReader();
+        reader.onload = function() { box.value = String(reader.result || '').trim(); };
+        reader.readAsText(file);
+        return;
+      }
+      var text = e.dataTransfer && e.dataTransfer.getData('text');
+      if (text) box.value = text.trim();
+    });
+  })();
+
+  function openNamedLink() {
+    var wanted = '';
+    try {
+      var params = new URLSearchParams(location.search || '');
+      wanted = (window.__OPEN_LINK__ || params.get('link') || params.get('seat') || (location.hash || '').replace('#','') || '').toLowerCase();
+    } catch (e) {
+      wanted = '';
+    }
+    if (wanted !== 'opus5') return;
+    var card = document.getElementById('opus5-card-top');
+    if (card) {
+      card.classList.add('active');
+      setTimeout(function() {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 80);
+    }
+  }
+
   loadMusicPlaylists();
-  setInterval(musicUpdateTrack, 10000);
+  musicUpdateTrack();
+  loadKeys();
+  openNamedLink();
+  setInterval(musicUpdateTrack, 12000);
 </script>
 </body>
 </html>

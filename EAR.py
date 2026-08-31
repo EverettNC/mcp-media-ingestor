@@ -1,9 +1,9 @@
 """
-EAR.py — live-bridge adapter over GitHub Christman-Sound CHRISTMAN_EAR_CANAL.
+EAR.py — timed grab for capture_voice.
 
-Canal listen() currently returns capture_audio() output (a numpy array).
-main.py capture_voice expects a WAV path. This file keeps that contract.
-It does not implement VAD. Corti is the ear; this is a timed grab.
+THEWHOLEHOUSE on :9785 is the supplier. Corti is /hear.
+CHRISTMAN_EAR_CANAL is only used if that package is actually on sys.path.
+This file does not invent a wav when the canal is not here.
 """
 from __future__ import annotations
 
@@ -18,8 +18,19 @@ from _paths import ensure_family_paths
 
 ensure_family_paths()
 
-from CHRISTMAN_EAR_CANAL.EAR import capture as canal_capture
-from CHRISTMAN_EAR_CANAL.EAR import listen as canal_listen
+try:
+    from CHRISTMAN_EAR_CANAL.EAR import capture as canal_capture
+    from CHRISTMAN_EAR_CANAL.EAR import listen as canal_listen
+except ImportError:
+    canal_capture = None
+    canal_listen = None
+
+HOUSE = "http://127.0.0.1:9785"
+_MISSING = (
+    "CHRISTMAN_EAR_CANAL is not on this machine. "
+    "THEWHOLEHOUSE is the supplier — Corti lives at "
+    f"{HOUSE}/hear."
+)
 
 
 def _as_wav_path(result, sample_rate: int = 16000) -> str:
@@ -45,8 +56,12 @@ def _as_wav_path(result, sample_rate: int = 16000) -> str:
 
 
 def listen(max_duration: float = 6.0) -> str:
+    if canal_listen is None:
+        raise RuntimeError(_MISSING)
     return _as_wav_path(canal_listen(max_duration=max_duration))
 
 
 def capture(duration_seconds: float = 6.0):
+    if canal_capture is None:
+        raise RuntimeError(_MISSING)
     return canal_capture(duration_seconds=duration_seconds)
