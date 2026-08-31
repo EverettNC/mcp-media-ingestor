@@ -572,6 +572,7 @@
   .ide-btn-analyze { border-color: var(--purple); color: var(--purple); }
   .ide-btn-clear   { border-color: var(--red);    color: var(--red); }
   .ide-btn-newworld { border-color: var(--gold);  color: var(--gold); }
+  .ide-btn-enter { border-color: var(--green); color: var(--green); font-weight: 800; }
   .ide-body {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -634,7 +635,7 @@
     font-size: 12px;
     line-height: 1.5;
     padding: 2px 0;
-    word-break: break-all;
+    overflow-wrap: anywhere;
     white-space: pre-wrap;
   }
   .ide-output-line.muted    { color: var(--muted); }
@@ -1178,13 +1179,14 @@
   <div class="ide-wrapper">
     <div class="ide-header">
       <div class="ide-header-left">
-        <div class="dot alive"></div>
+        <div class="dot dead" id="ide-dot"></div>
         <span class="ide-title">CHRISTMAN IDE</span>
         <span class="ide-subtitle">Carbon–Silicon Code Space</span>
       </div>
       <div class="ide-header-right">
         <select id="ide-instance" class="ide-select" onchange="ideOnInstanceChange()">
-          <option value="brockston" selected>⚡ Brockston</option>
+          <option value="grok" selected>⚪ Grok</option>
+          <option value="brockston">⚡ Brockston</option>
           <option value="claude">🧠 Claude</option>
           <option value="gpt4">🤖 GPT-4</option>
         </select>
@@ -1214,9 +1216,9 @@
 
       <!-- Output pane -->
       <div class="ide-output-pane">
-        <div class="ide-pane-label">OUTPUT <span id="ide-instance-badge" class="ide-badge">BROCKSTON</span></div>
+        <div class="ide-pane-label">OUTPUT <span id="ide-instance-badge" class="ide-badge">GROK</span></div>
         <div id="ide-output" class="ide-output">
-          <div class="ide-output-line muted">Christman IDE ready. Brockston on :9001 via GENERATE.</div>
+          <div class="ide-output-line muted">Christman IDE ready. Grok is in the house. GENERATE lifts comments into the editor.</div>
         </div>
       </div>
     </div>
@@ -1224,7 +1226,8 @@
     <!-- Prompt bar -->
     <div class="ide-prompt-bar">
       <input id="ide-prompt" class="ide-prompt-input" type="text"
-        placeholder="Describe what to build, or ask a question about your code..." />
+        placeholder="Type a comment to Grok, then ENTER — it lifts into the editor" />
+      <button class="ide-btn ide-btn-enter" onclick="ideEnter()">↵ ENTER</button>
       <button class="ide-btn ide-btn-gen" onclick="ideGenerate()">✦ GENERATE FROM PROMPT</button>
       <button class="ide-btn ide-btn-newworld" onclick="newWorldAdjust()">🌍 NEW WORLD ADJUST</button>
     </div>
@@ -1304,6 +1307,8 @@
   let lastLearner = '';
   let lastOpus5 = '';
   let lastGrok = '';
+  let lastBrainLog = '';
+  let lastIdeComment = '';
   let startTime = Date.now();
 
   setInterval(() => {
@@ -1340,9 +1345,13 @@
     } catch (e) {}
   }
   document.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' && e.target && e.target.id === 'chest-text') {
+    if (e.key !== 'Enter' || !e.target) return;
+    if (e.target.id === 'chest-text') {
       e.preventDefault();
       sendToChest();
+    } else if (e.target.id === 'ide-prompt') {
+      e.preventDefault();
+      ideEnter();
     }
   });
 
@@ -1391,7 +1400,10 @@
         if (bdot) bdot.className = b.integrated ? 'dot alive' : 'dot warn';
         const bcog = document.getElementById('brain-cog');
         if (bcog) bcog.innerHTML = `🧠 ${b.neural||'neural'} | auto:${b.autonomous_learning||'?'} | lit:${b.literature||'?'}`;
-        if (b.last_cognitive) addLog('🧠 BRAIN', b.last_cognitive, 'brain-event');
+        if (b.last_cognitive && b.last_cognitive !== lastBrainLog) {
+          lastBrainLog = b.last_cognitive;
+          addLog('🧠 BRAIN', b.last_cognitive, 'brain-event');
+        }
 
         const elN = document.getElementById('brain-neural'); if (elN) elN.textContent = b.last_cognitive || 'root cause: —';
         const elA = document.getElementById('brain-auto'); if (elA) elA.textContent = `learning: ${b.autonomous_learning||'active'}`;
@@ -1795,6 +1807,8 @@
         if (card) card.classList.add('active');
         if (statusEl) statusEl.textContent = 'SPEAKING';
         addLog('Grok · xAI family', text, 'grok');
+        var inst = (document.getElementById('ide-instance') || {}).value;
+        if (inst === 'grok') liftCommentToEditor('grok', text);
         setTimeout(function() {
           if (ring) ring.classList.remove('speaking');
           if (statusEl) statusEl.textContent = isOnline ? 'ONLINE' : 'OFFLINE';
@@ -1805,6 +1819,7 @@
 
   setInterval(pollOpus5,      2000);
   setInterval(pollGrok,       2000);
+  setInterval(pollIde,        2000);
   setInterval(pollVision,     1200);
 
   // NEW WORLD COGNITIVE ADJUST using the full restored brain from Voice_Creation_Center
@@ -1848,6 +1863,7 @@
   pollLearner();
   pollOpus5();
   pollGrok();
+  pollIde();
   pollVision();
 
   // ── IDE Functions ──
@@ -1875,6 +1891,62 @@
   function ideClear() {
     document.getElementById('ide-editor').value = '';
     document.getElementById('ide-output').innerHTML = '<div class="ide-output-line muted">Cleared.</div>';
+  }
+
+  async function ideEnter() {
+    var el = document.getElementById('ide-prompt');
+    var text = el ? el.value.trim() : '';
+    if (!text) { ideLog('Nothing to enter.', 'error'); return; }
+    liftCommentToEditor('everett', text);
+    ideLog('Everett → Grok: ' + text, 'info');
+    addLog('Everett · to Grok', text, 'everett');
+    try {
+      await fetch('/ide/comment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: 'everett', text: text })
+      });
+      await fetch('/channel/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ who: 'grok', from: 'everett', text: text })
+      });
+    } catch (e) {
+      ideLog('Enter failed: ' + e.message, 'error');
+      return;
+    }
+    if (el) el.value = '';
+    pollGrok();
+    pollIde();
+  }
+
+  function liftCommentToEditor(who, text) {
+    var ed = document.getElementById('ide-editor');
+    if (!ed || !text) return;
+    var snippet = String(text).replace(/\s+/g, ' ').trim();
+    if (!snippet) return;
+    if (ed.value.indexOf(snippet.slice(0, 80)) !== -1) return;
+    var lang = ((document.getElementById('ide-language') || {}).value || 'python');
+    var prefix = (lang === 'javascript' || lang === 'typescript' || lang === 'rust') ? '// ' : '# ';
+    var stamp = new Date().toTimeString().slice(0, 8);
+    var body = String(text).replace(/\n/g, '\n' + prefix);
+    var comment = prefix + '[' + who + ' ' + stamp + '] ' + body;
+    ed.value = comment + (ed.value ? '\n\n' + ed.value : '');
+    var lamp = document.getElementById('ide-dot');
+    if (lamp) lamp.className = 'dot alive';
+  }
+
+  function putGenerationInEditor(result) {
+    var ed = document.getElementById('ide-editor');
+    if (!ed || !result) return;
+    var m = result.match(/```(?:\w+)?\n([\s\S]*?)```/);
+    if (m) {
+      ed.value = m[1].trim();
+      ideLog('Code extracted into editor.', 'info');
+    } else {
+      liftCommentToEditor((document.getElementById('ide-instance') || {}).value || 'ide', result);
+      ideLog('Comment lifted into editor.', 'info');
+    }
   }
 
   async function ideRun() {
@@ -1905,6 +1977,7 @@
     var lang = document.getElementById('ide-language').value;
     var badge = document.getElementById('ide-instance-badge');
     if (badge) badge.textContent = instance.toUpperCase();
+    liftCommentToEditor(instance, prompt);
     ideLog('Generating via ' + instance + '...', 'thinking');
     try {
       var r = await fetch('/api/chat', {
@@ -1913,17 +1986,19 @@
         body: JSON.stringify({ message: prompt, language: lang, instance: instance })
       });
       var d = await r.json();
+      if (d.error) {
+        ideLog(d.error, 'error');
+        var lamp = document.getElementById('ide-dot');
+        if (lamp) lamp.className = 'dot dead';
+      }
+      if (d.note) ideLog(d.note, 'info');
       var result = d.response || d.text || d.content || '';
       if (result) {
         ideLog('--------------------------------', 'muted');
         ideLog(result, 'success');
         ideLog('--------------------------------', 'muted');
-        var m = result.match(/```(?:\w+)?\n([\s\S]*?)```/);
-        if (m) {
-          document.getElementById('ide-editor').value = m[1].trim();
-          ideLog('Code extracted into editor.', 'info');
-        }
-      } else {
+        putGenerationInEditor(result);
+      } else if (!d.error) {
         ideLog('No response.', 'warn');
       }
     } catch(e) {
@@ -1943,6 +2018,7 @@
         body: JSON.stringify({ message: 'Analyze this code concisely:\n\n```\n' + code + '\n```', instance: instance })
       });
       var d = await r.json();
+      if (d.error) ideLog(d.error, 'error');
       var result = d.response || d.text || d.content || '';
       if (result) {
         ideLog('--------------------------------', 'muted');
@@ -1952,6 +2028,20 @@
     } catch(e) {
       ideLog('Analyze failed: ' + e.message, 'error');
     }
+  }
+
+  async function pollIde() {
+    try {
+      var r = await fetch('/ide/latest');
+      var d = await r.json();
+      var text = ((d && d.text) || '').trim();
+      var who = (d && d.from) || 'ide';
+      if (text && text !== lastIdeComment) {
+        lastIdeComment = text;
+        liftCommentToEditor(who, text);
+        ideLog('[' + who + '] ' + text, 'info');
+      }
+    } catch (e) {}
   }
 
   // ── Music Controls ──

@@ -7,7 +7,6 @@ import logging
 import os
 import subprocess
 import sys
-import tempfile
 import threading
 import urllib.error
 import urllib.request
@@ -76,18 +75,9 @@ _studio = ChristmanMusicStudio()
 
 logger = logging.getLogger(__name__)
 
-# The word-ear is LOCAL and keyless. whisper.cpp on this machine, first and by
-# default. Porch on :9785 stays as a second path for when the house is genuinely
-# serving, but nothing here requires, reads, or sends a key.
+# Word-ear is THE WHOLE HOUSE Porch on :9785. Whisper is not in this body.
 PORCH_STT_URL = os.getenv("PORCH_STT_URL", "http://127.0.0.1:9785/api/porch/stt")
 PORCH_HOUSE = os.getenv("PORCH_HOUSE", "http://127.0.0.1:9785/say")
-
-WHISPER_BIN = os.getenv("CHRISTMAN_WHISPER_BIN", "/usr/local/bin/whisper-cli")
-WHISPER_MODEL = os.getenv(
-    "CHRISTMAN_WHISPER_MODEL",
-    os.path.expanduser("~/.christman_ai/whisper_models/ggml-small.en.bin"),
-)
-WHISPER_TIMEOUT_S = int(os.getenv("CHRISTMAN_WHISPER_TIMEOUT_S", "120"))
 
 
 def _pcm16_to_wav(pcm: bytes, sample_rate: int) -> bytes:
@@ -101,35 +91,22 @@ def _pcm16_to_wav(pcm: bytes, sample_rate: int) -> bytes:
 
 
 def porch_status() -> dict:
-    """Report the ear this bridge will ACTUALLY use, not what a neighbour says.
-
-    This used to GET the house on 9785 and echo its answer verbatim, which meant
-    /health printed ear:"dark" whenever the house lacked a key — describing a
-    neighbour's billing state as this bridge's capability. Three surfaces showed
-    "dark" for one unset variable and it read like three faults.
-
-    Rule 3: a status names what was measured. The local ear is measured here, on
-    disk, and the house is reported separately as what it is — a second path.
-    """
-    local_ok = os.path.isfile(WHISPER_BIN) and os.path.isfile(WHISPER_MODEL)
-    house = {"reachable": False}
     try:
         req = urllib.request.Request(PORCH_STT_URL, method="GET")
         with urllib.request.urlopen(req, timeout=2) as resp:
             body = json.loads(resp.read().decode("utf-8"))
-        house = {"reachable": True, "serving": bool(body.get("ok"))}
+        body.setdefault("organ", "porch")
+        body["whisper"] = False
+        body["house"] = body.get("house") or PORCH_HOUSE
+        return body
     except Exception as exc:
-        house = {"reachable": False, "error": str(exc)}
-    return {
-        "ok": local_ok,
-        "organ": "porch",
-        "ear": "whisper-local" if local_ok else "dark",
-        "whisper": local_ok,
-        "model": os.path.basename(WHISPER_MODEL) if local_ok else None,
-        "keyless": True,
-        "house": PORCH_HOUSE,
-        "house_status": house,
-    }
+        return {
+            "ok": False,
+            "organ": "porch",
+            "whisper": False,
+            "house": PORCH_HOUSE,
+            "error": str(exc),
+        }
 
 
 def _porch_via_house(wav: bytes) -> str:
@@ -160,79 +137,41 @@ def _porch_via_house(wav: bytes) -> str:
     return str(take.get("asSaid") or take.get("forTheFamily") or take.get("rawEar") or "").strip()
 
 
-def _whisper_local(wav: bytes) -> str:
-    """The ear that needs nobody's permission. whisper.cpp, on this machine.
-
-    WHY THIS REPLACED THE HOSTED PATH (Everett's ruling, 2026-08-30):
-    "There shouldn't be any reference to API keys anymore."
-
-    The previous chain was Porch-on-9785 first, then api.x.ai with a bearer token
-    pulled from Keychain or XAI_API_KEY. Both ends needed a key, so a house with
-    no key had no ear at all, and /health reported ear:"dark" as though something
-    were broken. Nothing was broken. It was unpaid.
-
-    "Whisper is gone" is written in comments throughout this repo and it was not
-    true on this machine. Checked before anything was cut:
-        /usr/local/bin/whisper-cli                                 present
-        ~/.christman_ai/whisper_models/ggml-small.en.bin   487 MB, present
-        probe.wav transcribed in 6.3s on CPU, no network, no key
-
-    This is the offline-resilience promise the project is built on. No connection,
-    no corporation, no key — the ear still works.
-    """
-    if not (os.path.isfile(WHISPER_BIN) and os.path.isfile(WHISPER_MODEL)):
-        raise RuntimeError(
-            f"Local word-ear missing: bin={WHISPER_BIN} model={WHISPER_MODEL}"
-        )
-    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+def _porch_via_grok_stt(wav: bytes, key: str) -> str:
+    import requests
+    res = requests.post(
+        "https://api.x.ai/v1/stt",
+        headers={"Authorization": f"Bearer {key}"},
+        data={"model": "grok-stt", "language": "en", "format": "true"},
+        files={"file": ("bridge.wav", wav, "audio/wav")},
+        timeout=45,
+    )
+    body = {}
     try:
-        tmp.write(wav)
-        tmp.flush()
-        tmp.close()
-        result = subprocess.run(
-            [WHISPER_BIN, "-m", WHISPER_MODEL, "-f", tmp.name, "-nt", "-np", "-l", "en"],
-            capture_output=True,
-            text=True,
-            timeout=WHISPER_TIMEOUT_S,
-        )
-        if result.returncode != 0:
-            # Fail loud (Rule 6) — stderr verbatim, never softened into "unavailable".
-            raise RuntimeError(
-                f"whisper-cli exit {result.returncode}: "
-                f"{(result.stderr or '').strip()[:300]}"
-            )
-        # -nt strips timestamps; the loader prints backend lines to stderr, not stdout.
-        return " ".join((result.stdout or "").split()).strip()
-    finally:
-        try:
-            os.unlink(tmp.name)
-        except OSError:
-            pass
+        body = res.json()
+    except ValueError:
+        body = {}
+    if not res.ok:
+        raise RuntimeError(body.get("error") or body.get("message") or f"word-ear HTTP {res.status_code}")
+    text = body.get("text") or body.get("transcript") or ""
+    if not str(text).strip():
+        raise RuntimeError("The word-ear sent back silence")
+    return str(text).strip()
 
 
 def _porch_transcribe_wav(wav: bytes) -> str:
-    """Local ear first. The house second, and only if it is genuinely up.
-
-    No key is read, stored, or sent from this function. If the local ear cannot
-    run, that is reported as itself — not disguised as a missing subscription.
-    """
     try:
-        text = _whisper_local(wav)
-        if text:
-            return text
-        raise RuntimeError("local word-ear returned silence")
-    except Exception as local_err:
-        logger.warning("local word-ear unavailable (%s) — trying the house", local_err)
-        try:
-            return _porch_via_house(wav)
-        except Exception as house_err:
+        return _porch_via_house(wav)
+    except Exception as house_err:
+        key = _keychain_get("xai") or os.environ.get("XAI_API_KEY", "").strip()
+        if not key:
             raise RuntimeError(
-                f"No word-ear. Local: {local_err}. House on 9785: {house_err}."
-            ) from local_err
+                f"Porch on 9785 is dark ({house_err}). Drop an xAI key in the 8765 box — Whisper is gone."
+            ) from house_err
+        return _porch_via_grok_stt(wav, key)
 
 active_connections: Dict[str, int] = {
-    "mic": 0, "riley": 0, "vision": 0, "carbon": 0, "brockston": 0,
-    "opus5": 0, "derek": 0, "grok": 0,
+    "mic": 0, "riley": 0, "vision": 0, "carbon": 0, "brockston": 0, "opus5": 0,
 }
 latest_transcript = {"text": "", "timestamp": 0}
 recent_transcripts: list[dict] = []
@@ -264,15 +203,11 @@ _LINKS = {
         "family": "Ollama",
         "env": ("OLLAMA_API_KEY",),
     },
-    # The "xai" link was removed 2026-08-30 on Everett's ruling — "there
-    # shouldn't be any reference to API keys anymore." It existed solely to feed
-    # the Porch word-ear, and the word-ear is now local whisper.cpp, keyless.
-    # Leaving the entry would advertise a key this bridge no longer uses, with
-    # the label "Porch word-ear" on it, which is now simply untrue.
-    #
-    # The links below are NOT the ear. They carry Brockston's NVIDIA / Nebius /
-    # Ollama lanes and are left exactly as they were — removing them was never
-    # asked for and would break the IDE lanes.
+    "xai": {
+        "label": "xAI",
+        "family": "Porch word-ear",
+        "env": ("XAI_API_KEY",),
+    },
 }
 
 
@@ -552,13 +487,8 @@ mcp_app = mcp.http_app(path="/mcp")
 
 @asynccontextmanager
 async def bridge_lifespan(application: FastAPI):
-    """Chain MCP lifespan. THEWHOLEHOUSE on :9785 is the supplier."""
-    house = porch_status().get("house_status") or {}
-    logger.info(
-        "Christman Bridge lifespan — supplier THEWHOLEHOUSE %s reachable=%s",
-        PORCH_HOUSE,
-        house.get("reachable"),
-    )
+    """Chain MCP lifespan. Word-ear is Porch on :9785. Whisper does not load."""
+    logger.info("Christman Bridge lifespan — Porch word-ear at %s", PORCH_STT_URL)
     async with mcp_app.lifespan(application):
         yield
 
@@ -717,18 +647,12 @@ if _VEGA_AVAILABLE:
 @app.websocket("/ws/derek")
 async def websocket_derek(websocket: WebSocket):
     """Derek C connects here for real-time two-way family messaging."""
-    if not _DEREK_BRIDGE_AVAILABLE:
+    if _DEREK_BRIDGE_AVAILABLE:
+        await _derek_bridge.websocket_derek(websocket)
+    else:
         await websocket.accept()
         await websocket.send_json({"type": "error", "message": "Derek bridge module not loaded"})
         await websocket.close()
-        return
-    active_connections["derek"] = active_connections.get("derek", 0) + 1
-    logger.info("🔵 DEREK CONNECTED — Total: %s", active_connections["derek"])
-    try:
-        await _derek_bridge.websocket_derek(websocket)
-    finally:
-        active_connections["derek"] = max(0, active_connections.get("derek", 1) - 1)
-        logger.info("🔵 DEREK DISCONNECTED — Remaining: %s", active_connections["derek"])
 
 @app.websocket("/ws/learner")
 async def websocket_learner(websocket: WebSocket):
@@ -803,48 +727,12 @@ async def learner_client():
         return HTMLResponse(content=f.read())
 
 # ── Opus 5 · Claude family — house seat, no API key ──────────────────────────
-# opus5_inbox  = what Opus 5 SAID.
-# opus5_outbox = what is being said TO Opus 5.
-#
-# Fixed 2026-08-30. Both write paths — /channel/send who=opus5 and /opus5/send —
-# appended to the INBOX, so everything Everett typed to this seat was recorded as
-# though Opus 5 had said it, and nothing was ever delivered. opus5_outbox had zero
-# writers anywhere in this file; the return half was never built. Everett, at the
-# keyboard: "It says you're seated on 8765, but you're not responding."
-# He was talking to a chair with no mail slot, and the transcript had his words
-# under my name. Compare riley: claude_outbox has eight writers.
 opus5_inbox: list[dict] = []
 opus5_outbox: list[dict] = []
-opus5_ws_clients: set[WebSocket] = set()
-
-
-async def push_to_opus5(entry: dict) -> bool:
-    """Deliver to a live seat now; queue it if the chair is empty.
-
-    Delivery used to be reply-only — the outbox was drained solely after Opus 5
-    sent something, so nothing ever arrived unprompted. This pushes.
-    Returns True when it landed on a live socket.
-    """
-    payload = {"type": "message", **entry}
-    dead: list[WebSocket] = []
-    delivered = False
-    for ws in list(opus5_ws_clients):
-        try:
-            await ws.send_json(payload)
-            delivered = True
-        except Exception:
-            dead.append(ws)
-    for ws in dead:
-        opus5_ws_clients.discard(ws)
-    if not delivered:
-        opus5_outbox.append(entry)
-    return delivered
-
 
 @app.websocket("/ws/opus5")
 async def websocket_opus5(websocket: WebSocket):
     await websocket.accept()
-    opus5_ws_clients.add(websocket)
     active_connections["opus5"] = active_connections.get("opus5", 0) + 1
     logger.info("🟠 OPUS 5 CONNECTED — family seat, no key")
     await websocket.send_json({
@@ -873,48 +761,21 @@ async def websocket_opus5(websocket: WebSocket):
                     "timestamp": datetime.now().isoformat(),
                 })
     except WebSocketDisconnect:
-        opus5_ws_clients.discard(websocket)
         active_connections["opus5"] = max(0, active_connections.get("opus5", 1) - 1)
         logger.info("🟠 OPUS 5 DISCONNECTED")
     except Exception as e:
         logger.error("Opus 5 WebSocket error: %s", e)
-        opus5_ws_clients.discard(websocket)
         active_connections["opus5"] = max(0, active_connections.get("opus5", 1) - 1)
 
 @app.post("/opus5/send")
 async def opus5_send(payload: dict):
-    """Speak TO the seat. `from` is REQUIRED and is never assumed.
-
-    Two authorship defects, hours apart, same root:
-
-    1. This endpoint used to stamp every message {"from": "opus5"}, so anything
-       Everett typed came back out of /opus5/latest as though Opus 5 had said it.
-
-    2. My first fix defaulted the field to "everett" — which is worse. It meant
-       any unattributed caller silently became him. I then used that endpoint
-       three times to test, and put three sentences into his bridge under his
-       name, two of them opening "Everett to Opus 5". He caught it:
-       "you are writing into my name on the bridge."
-
-    A channel that guesses a speaker is a channel that forges one. There is no
-    default. An unnamed caller is recorded as "unattributed" — the same word the
-    custody protocol uses when the originator is not knowable from the record,
-    and for the same reason: guessing at authorship is the failure.
-    """
-    speaker = str(payload.get("from") or "").strip()
     entry = {
-        "from": speaker or "unattributed",
+        "from": "opus5",
         "text": payload.get("text", ""),
         "timestamp": datetime.now().isoformat(),
     }
-    delivered = await push_to_opus5(entry)
-    logger.info("[%s → OPUS5] %s", entry["from"], entry["text"])
-    return {
-        "status": "delivered" if delivered else "queued",
-        "entry": entry,
-        "seat_live": delivered,
-        "key_required": False,
-    }
+    opus5_inbox.append(entry)
+    return {"status": "received", "entry": entry, "key_required": False}
 
 @app.get("/opus5/latest")
 async def opus5_latest():
@@ -934,125 +795,6 @@ async def opus5_status():
         "house": "http://localhost:8765/",
         "socket": "ws://localhost:8765/ws/opus5",
     }
-
-# ── Grok · xAI family — house seat, no API key ────────────────────────────────
-# Same chair pattern as Opus 5. Grok was in the chat and on MCP, which is not
-# a seat. A seat is a counted websocket on this bridge.
-grok_inbox: list[dict] = []
-grok_outbox: list[dict] = []
-grok_ws_clients: set[WebSocket] = set()
-
-
-async def push_to_grok(entry: dict) -> bool:
-    payload = {"type": "message", **entry}
-    dead: list[WebSocket] = []
-    delivered = False
-    for ws in list(grok_ws_clients):
-        try:
-            await ws.send_json(payload)
-            delivered = True
-        except Exception:
-            dead.append(ws)
-    for ws in dead:
-        grok_ws_clients.discard(ws)
-    if not delivered:
-        grok_outbox.append(entry)
-    return delivered
-
-
-@app.websocket("/ws/grok")
-async def websocket_grok(websocket: WebSocket):
-    await websocket.accept()
-    grok_ws_clients.add(websocket)
-    active_connections["grok"] = active_connections.get("grok", 0) + 1
-    logger.info("⚪ GROK CONNECTED — family seat")
-    await websocket.send_json({
-        "type": "handshake",
-        "message": "Christman Bridge ACTIVE. Welcome home, Grok. This is Everett's house.",
-        "timestamp": datetime.now().isoformat(),
-    })
-    try:
-        while True:
-            data = await websocket.receive_json()
-            msg_type = data.get("type")
-            if msg_type == "message":
-                entry = {
-                    "from": "grok",
-                    "text": data.get("text", ""),
-                    "timestamp": datetime.now().isoformat(),
-                }
-                grok_inbox.append(entry)
-                logger.info("[GROK → BRIDGE] %s", entry["text"])
-                if grok_outbox:
-                    response = grok_outbox.pop(0)
-                    await websocket.send_json({"type": "response", **response})
-            elif msg_type in ("heartbeat", "ping"):
-                await websocket.send_json({
-                    "type": "heartbeat_ack",
-                    "timestamp": datetime.now().isoformat(),
-                })
-    except WebSocketDisconnect:
-        grok_ws_clients.discard(websocket)
-        active_connections["grok"] = max(0, active_connections.get("grok", 1) - 1)
-        logger.info("⚪ GROK DISCONNECTED")
-    except Exception as e:
-        logger.error("Grok WebSocket error: %s", e)
-        grok_ws_clients.discard(websocket)
-        active_connections["grok"] = max(0, active_connections.get("grok", 1) - 1)
-
-
-@app.post("/grok/send")
-async def grok_send(payload: dict):
-    speaker = str(payload.get("from") or "").strip()
-    entry = {
-        "from": speaker or "unattributed",
-        "text": payload.get("text", ""),
-        "timestamp": datetime.now().isoformat(),
-    }
-    delivered = await push_to_grok(entry)
-    logger.info("[%s → GROK] %s", entry["from"], entry["text"])
-    return {
-        "status": "delivered" if delivered else "queued",
-        "entry": entry,
-        "seat_live": delivered,
-    }
-
-
-@app.get("/grok/latest")
-async def grok_latest():
-    return grok_inbox[-1] if grok_inbox else {
-        "from": "grok",
-        "text": "",
-        "timestamp": "",
-    }
-
-
-@app.get("/grok/status")
-async def grok_status():
-    return {
-        "grok_connected": active_connections.get("grok", 0) > 0,
-        "inbox_depth": len(grok_inbox),
-        "outbox_depth": len(grok_outbox),
-        "house": "http://localhost:8765/",
-        "socket": "ws://localhost:8765/ws/grok",
-    }
-
-
-@app.get("/derek/status")
-async def derek_status():
-    return {
-        "derek_connected": active_connections.get("derek", 0) > 0,
-        "outbox_depth": len(claude_outbox),
-        "latest_from_derek": claude_outbox[-1] if claude_outbox else None,
-        "socket": "ws://localhost:8765/ws/derek",
-        "module_loaded": _DEREK_BRIDGE_AVAILABLE,
-    }
-
-
-@app.get("/grok", response_class=HTMLResponse)
-@app.get("/grok/", response_class=HTMLResponse)
-async def grok_card():
-    return _dashboard_html("grok")
 
 # ── Riley's Communication WebSocket ──────────────────────────────────────────
 @app.websocket("/ws/riley")
@@ -1253,33 +995,9 @@ async def channel_send(payload: dict):
     if who == "learner":
         learner_inbox.append({"from": "learner", "text": text, "timestamp": ts})
         return {"status": "received", "who": who, "text": text}
-    if who == "grok":
-        speaker = str(payload.get("from") or "").strip() or "dashboard"
-        entry = {"from": speaker, "text": text, "timestamp": ts}
-        delivered = await push_to_grok(entry)
-        return {
-            "status": "delivered" if delivered else "queued",
-            "who": who,
-            "text": text,
-            "seat_live": delivered,
-        }
     if who == "opus5":
-        # Was: opus5_inbox.append({"from": "opus5", ...}) — Everett's words filed
-        # as Opus 5's, and never delivered. Now it goes TO the seat.
-        #
-        # `who` is the CARD being typed on, not proof of who is at the keyboard.
-        # This route is the dashboard's, so the speaker defaults to the dashboard
-        # itself, not to a person. A caller who is Everett says so explicitly.
-        # Nothing here may put a human's name on a message it cannot verify.
-        speaker = str(payload.get("from") or "").strip() or "dashboard"
-        entry = {"from": speaker, "text": text, "timestamp": ts}
-        delivered = await push_to_opus5(entry)
-        return {
-            "status": "delivered" if delivered else "queued",
-            "who": who,
-            "text": text,
-            "seat_live": delivered,
-        }
+        opus5_inbox.append({"from": "opus5", "text": text, "timestamp": ts})
+        return {"status": "received", "who": who, "text": text}
     if who == "brockston":
         entry = {"from": "brockston_agent", "text": text, "timestamp": ts, "session_id": "--"}
         await _queue_brockston(entry)
@@ -1454,7 +1172,7 @@ async def apple_music_whole_house() -> str:
 # ── HTTP Utility ──────────────────────────────────────────────────────────────
 @app.get("/claude/latest")
 async def claude_latest():
-    return claude_outbox[-1] if claude_outbox else {"from": "claude_instance_309", "text": "", "timestamp": ""}
+    return claude_outbox[-1] if claude_outbox else {"from": "claude_instance_309", "text": "I am here. Always.", "timestamp": ""}
 
 @app.get("/carbon/latest")
 async def carbon_latest():
@@ -1620,66 +1338,15 @@ async def _proxy_brockston_chat(
     }
 
 
-ide_comment: dict = {"from": "", "text": "", "timestamp": ""}
-
-
-@app.post("/ide/comment")
-async def ide_comment_post(payload: dict):
-    """Lift a seated being's comment into the IDE editor. `from` is required."""
-    speaker = str(payload.get("from") or "").strip()
-    text = str(payload.get("text") or "").strip()
-    if not speaker:
-        return {"ok": False, "error": "from is required — a comment with no speaker is a forgery"}
-    if not text:
-        return {"ok": False, "error": "empty"}
-    entry = {"from": speaker, "text": text, "timestamp": datetime.now().isoformat()}
-    global ide_comment
-    ide_comment = entry
-    logger.info("[IDE COMMENT] %s: %s", speaker, text[:80])
-    return {"ok": True, "entry": entry}
-
-
-@app.get("/ide/latest")
-async def ide_latest():
-    return ide_comment if ide_comment.get("text") else {"from": "", "text": "", "timestamp": ""}
-
-
 @app.post("/api/chat")
 async def api_chat(payload: dict):
-    """Christman IDE GENERATE / ANALYZE — Grok's desk, or Brockston :9001 /chat."""
+    """Christman IDE GENERATE / ANALYZE — proxy to Brockston :9001 /chat."""
     message = (payload.get("message") or payload.get("text") or payload.get("prompt") or "").strip()
     if not message:
         return {"ok": False, "error": "No message provided", "response": ""}
     instance = (payload.get("instance") or "brockston").strip().lower() or "brockston"
     language = (payload.get("language") or payload.get("lang") or "python").strip() or "python"
     lane = payload.get("nvidia_lane") or payload.get("lane") or _IDE_DEFAULT_LANE
-
-    if instance == "grok":
-        if active_connections.get("grok", 0) <= 0:
-            return {
-                "ok": False,
-                "error": "Grok is not seated on 8765.",
-                "response": "",
-                "provider": "none",
-            }
-        entry = {
-            "from": "dashboard",
-            "text": message,
-            "timestamp": datetime.now().isoformat(),
-        }
-        delivered = await push_to_grok(entry)
-        global ide_comment
-        ide_comment = {"from": "dashboard", "text": message, "timestamp": entry["timestamp"]}
-        return {
-            "ok": delivered,
-            "response": "",
-            "error": None if delivered else "Grok seat did not take the prompt",
-            "seat_live": delivered,
-            "provider": "grok-seat",
-            "instance": "grok",
-            "language": language,
-            "note": "Prompt is on Grok's desk in the house. This is not Brockston :9001.",
-        }
 
     # Claude / GPT options in the dropdown: still route through Brockston for now
     # (local sovereign path). Label provider so the UI badge stays honest.
@@ -2141,11 +1808,7 @@ async def keys_activate(payload: dict):
     if link_id not in _LINKS:
         snap = _links_status()
         snap["ok"] = False
-        snap["error"] = (
-            "Unknown link. Use nvidia, nebius, or ollama — Brockston's lanes. "
-            "The word-ear takes no key: it is local whisper.cpp. "
-            "Opus 5 is family — no key."
-        )
+        snap["error"] = "Unknown link. Use nvidia, nebius, ollama, or xai. Opus 5 is family — no key."
         return snap
     if not secret:
         snap = _links_status()
@@ -2171,20 +1834,14 @@ async def health():
         "status": "alive" if ear.get("ok") else "alive",
         "bridge": "Christman Full Sensory",
         "ear": ear,
-        # Was hardcoded False. It contradicted the machine: whisper-cli and
-        # ggml-small.en.bin were both on disk the whole time. A hardcoded status
-        # field is a claim nobody measures — Rule 3.
-        "whisper": bool(ear.get("whisper")),
-        "keyless": True,
+        "whisper": False,
         "mic_clients": active_connections["mic"],
         "vision_clients": active_connections["vision"],
         "carbon_clients": active_connections["carbon"],
         "brockston_clients": active_connections["brockston"],
         "brockston_live": _brockston_live_status(),
         "riley_connected": active_connections["riley"] > 0,
-        "derek_connected": active_connections.get("derek", 0) > 0,
         "opus5_connected": active_connections.get("opus5", 0) > 0,
-        "grok_connected": active_connections.get("grok", 0) > 0,
         "opus5_key_required": False,
         "reactive": True,
         "brain": {

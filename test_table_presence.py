@@ -45,6 +45,23 @@ class TablePresenceTests(unittest.TestCase):
     def test_empty_derek_latest_is_not_a_spoken_line(self):
         self.assertNotIn('"I am here. Always."', MAIN)
 
+    def test_ide_shows_chat_error_instead_of_empty_ok(self):
+        self.assertIn("d.error", HTML)
+        self.assertIn("liftCommentToEditor", HTML)
+        self.assertIn('option value="grok"', HTML.split("ide-instance")[1][:800])
+
+    def test_ide_output_does_not_break_every_character(self):
+        self.assertNotIn("word-break: break-all;", HTML)
+
+    def test_ide_comment_mail_slot_exists(self):
+        self.assertIn('/ide/comment', MAIN)
+        self.assertIn('/ide/latest', MAIN)
+
+    def test_ide_prompt_has_enter(self):
+        self.assertIn("ideEnter()", HTML)
+        self.assertIn("↵ ENTER", HTML)
+        self.assertIn("e.target.id === 'ide-prompt'", HTML)
+
 
 if __name__ == "__main__":
     unittest.main()
