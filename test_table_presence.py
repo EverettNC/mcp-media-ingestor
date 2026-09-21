@@ -62,6 +62,36 @@ class TablePresenceTests(unittest.TestCase):
         self.assertIn("↵ ENTER", HTML)
         self.assertIn("e.target.id === 'ide-prompt'", HTML)
 
+    def test_transcript_lamp_is_measured(self):
+        self.assertIn('id="ear-dot"', HTML)
+        self.assertNotIn("LIVE TRANSCRIPT · PORCH WORD-EAR · 9785", HTML)
+        self.assertNotIn(
+            '<div class="dot alive"></div>\n          LIVE TRANSCRIPT',
+            HTML,
+        )
+
+    def test_health_fail_kills_bridge_lamp(self):
+        self.assertIn("BRIDGE DOWN", HTML)
+        catch = HTML.split("async function pollHealth()")[1].split("async function pollBrain()")[0]
+        self.assertIn("bridge-dot", catch.split("catch(e)")[1])
+        self.assertIn("grok-dot", catch.split("catch(e)")[1])
+
+    def test_filament_is_the_word_ear(self):
+        self.assertIn("127.0.0.1:4850", MAIN)
+        self.assertIn("filament", MAIN.lower())
+        self.assertIn("correct_family_names", MAIN)
+        self.assertNotIn("whisper-cli", MAIN)
+        self.assertNotIn("WHISPER_BIN", MAIN)
+        self.assertNotIn("ggml-small.en.bin", MAIN)
+        self.assertNotIn("--prompt", MAIN)
+
+    def test_mcp_transcribe_uses_filament(self):
+        server = (HERE / "server.py").read_text()
+        self.assertIn("127.0.0.1:4850", server)
+        self.assertIn("/stt", server)
+        self.assertNotIn("whisper.cpp", server)
+        self.assertNotIn("ggml-small.en.bin", server)
+
 
 if __name__ == "__main__":
     unittest.main()

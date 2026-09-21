@@ -10,7 +10,7 @@ Built so every AI (Grok, Claude, Gemini, or anything else) can connect and exper
 - Real-time audio streaming over WebSockets
 - Full prosody and emotional nuance preserved
 - Low-latency voice loop
-- Local Whisper + ONNX backend
+- Local Filament (Vosk) on :4850
 - MCP compatible with `.mcp.json`
 - Project tunnel ready for easy remote access
 

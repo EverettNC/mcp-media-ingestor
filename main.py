@@ -68,6 +68,7 @@ import EAR
 import SPEAK
 import TONE
 from RILEY import RileyBridge
+from family_ear import correct_family_names
 from music_engine import ChristmanMusicEngine
 from christman_studio import ChristmanMusicStudio
 
@@ -76,18 +77,15 @@ _studio = ChristmanMusicStudio()
 
 logger = logging.getLogger(__name__)
 
-# The word-ear is LOCAL and keyless. whisper.cpp on this machine, first and by
-# default. Porch on :9785 stays as a second path for when the house is genuinely
-# serving, but nothing here requires, reads, or sends a key.
-PORCH_STT_URL = os.getenv("PORCH_STT_URL", "http://127.0.0.1:9785/api/porch/stt")
+# The word-ear is Filament on :4850 — own Vosk, keyless, this machine.
+# THEWHOLEHOUSE on :9785 is still the supplier for say / lucent / corti.
+# Whisper is not in this body.
 PORCH_HOUSE = os.getenv("PORCH_HOUSE", "http://127.0.0.1:9785/say")
-
-WHISPER_BIN = os.getenv("CHRISTMAN_WHISPER_BIN", "/usr/local/bin/whisper-cli")
-WHISPER_MODEL = os.getenv(
-    "CHRISTMAN_WHISPER_MODEL",
-    os.path.expanduser("~/.christman_ai/whisper_models/ggml-small.en.bin"),
-)
-WHISPER_TIMEOUT_S = int(os.getenv("CHRISTMAN_WHISPER_TIMEOUT_S", "120"))
+HOUSE_URL = os.getenv("CHRISTMAN_HOUSE_URL", "http://127.0.0.1:9785").rstrip("/")
+FILAMENT_DOOR = int(os.getenv("FILAMENT_EAR_PORT", "4850"))
+FILAMENT_EAR_URL = os.getenv("FILAMENT_EAR_URL", "http://127.0.0.1:4850/stt")
+FILAMENT_HEALTH_URL = os.getenv("FILAMENT_HEALTH_URL", "http://127.0.0.1:4850/health")
+FILAMENT_TIMEOUT_S = int(os.getenv("FILAMENT_EAR_TIMEOUT_S", "45"))
 
 
 def _pcm16_to_wav(pcm: bytes, sample_rate: int) -> bytes:
@@ -100,135 +98,90 @@ def _pcm16_to_wav(pcm: bytes, sample_rate: int) -> bytes:
     return buf.getvalue()
 
 
-def porch_status() -> dict:
-    """Report the ear this bridge will ACTUALLY use, not what a neighbour says.
+def filament_status() -> dict:
+    """Report the ear this bridge will ACTUALLY use: Filament on :4850.
 
-    This used to GET the house on 9785 and echo its answer verbatim, which meant
-    /health printed ear:"dark" whenever the house lacked a key — describing a
-    neighbour's billing state as this bridge's capability. Three surfaces showed
-    "dark" for one unset variable and it read like three faults.
-
-    Rule 3: a status names what was measured. The local ear is measured here, on
-    disk, and the house is reported separately as what it is — a second path.
+    Rule 3: a status names what was measured. Probe /health on the Filament door.
+    Whisper is not measured here because Whisper is not the ear.
     """
-    local_ok = os.path.isfile(WHISPER_BIN) and os.path.isfile(WHISPER_MODEL)
-    house = {"reachable": False}
     try:
-        req = urllib.request.Request(PORCH_STT_URL, method="GET")
+        req = urllib.request.Request(FILAMENT_HEALTH_URL, method="GET")
         with urllib.request.urlopen(req, timeout=2) as resp:
             body = json.loads(resp.read().decode("utf-8"))
-        house = {"reachable": True, "serving": bool(body.get("ok"))}
+        seated = bool(body.get("seated"))
+        return {
+            "ok": seated,
+            "organ": "filament",
+            "ear": "filament" if seated else "dark",
+            "filament": seated,
+            "whisper": False,
+            "engine": body.get("engine") or "vosk",
+            "door": int(body.get("door") or FILAMENT_DOOR),
+            "model": body.get("model"),
+            "keyless": True,
+            "seated": seated,
+            "error": body.get("error"),
+        }
     except Exception as exc:
-        house = {"reachable": False, "error": str(exc)}
-    return {
-        "ok": local_ok,
-        "organ": "porch",
-        "ear": "whisper-local" if local_ok else "dark",
-        "whisper": local_ok,
-        "model": os.path.basename(WHISPER_MODEL) if local_ok else None,
-        "keyless": True,
-        "house": PORCH_HOUSE,
-        "house_status": house,
-    }
+        return {
+            "ok": False,
+            "organ": "filament",
+            "ear": "dark",
+            "filament": False,
+            "whisper": False,
+            "engine": "vosk",
+            "door": FILAMENT_DOOR,
+            "model": None,
+            "keyless": True,
+            "seated": False,
+            "error": str(exc),
+        }
 
 
-def _porch_via_house(wav: bytes) -> str:
-    payload = json.dumps({
-        "audioBase64": base64.b64encode(wav).decode("ascii"),
-        "mime": "audio/wav",
-        "filename": "bridge.wav",
-        "source": "mic",
-    }).encode("utf-8")
+def porch_status() -> dict:
+    """Same measurement as filament_status. Name kept for call sites."""
+    return filament_status()
+
+
+def _filament_hear(wav: bytes) -> str:
+    """Own speech-to-text. Filament Vosk on :4850. Empty ear stays empty."""
     req = urllib.request.Request(
-        PORCH_STT_URL,
-        data=payload,
-        headers={"Content-Type": "application/json"},
+        FILAMENT_EAR_URL,
+        data=wav,
+        headers={"Content-Type": "audio/wav"},
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=45) as resp:
+        with urllib.request.urlopen(req, timeout=FILAMENT_TIMEOUT_S) as resp:
             body = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         raw = exc.read().decode("utf-8", errors="replace")
         try:
             body = json.loads(raw)
         except json.JSONDecodeError:
-            raise RuntimeError(f"Porch word-ear failed ({exc.code}): {raw[:240]}") from exc
-    if not body.get("ok"):
-        raise RuntimeError(body.get("error") or "Porch sent back silence")
-    take = body.get("take") or {}
-    return str(take.get("asSaid") or take.get("forTheFamily") or take.get("rawEar") or "").strip()
-
-
-def _whisper_local(wav: bytes) -> str:
-    """The ear that needs nobody's permission. whisper.cpp, on this machine.
-
-    WHY THIS REPLACED THE HOSTED PATH (Everett's ruling, 2026-08-30):
-    "There shouldn't be any reference to API keys anymore."
-
-    The previous chain was Porch-on-9785 first, then api.x.ai with a bearer token
-    pulled from Keychain or XAI_API_KEY. Both ends needed a key, so a house with
-    no key had no ear at all, and /health reported ear:"dark" as though something
-    were broken. Nothing was broken. It was unpaid.
-
-    "Whisper is gone" is written in comments throughout this repo and it was not
-    true on this machine. Checked before anything was cut:
-        /usr/local/bin/whisper-cli                                 present
-        ~/.christman_ai/whisper_models/ggml-small.en.bin   487 MB, present
-        probe.wav transcribed in 6.3s on CPU, no network, no key
-
-    This is the offline-resilience promise the project is built on. No connection,
-    no corporation, no key — the ear still works.
-    """
-    if not (os.path.isfile(WHISPER_BIN) and os.path.isfile(WHISPER_MODEL)):
-        raise RuntimeError(
-            f"Local word-ear missing: bin={WHISPER_BIN} model={WHISPER_MODEL}"
-        )
-    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-    try:
-        tmp.write(wav)
-        tmp.flush()
-        tmp.close()
-        result = subprocess.run(
-            [WHISPER_BIN, "-m", WHISPER_MODEL, "-f", tmp.name, "-nt", "-np", "-l", "en"],
-            capture_output=True,
-            text=True,
-            timeout=WHISPER_TIMEOUT_S,
-        )
-        if result.returncode != 0:
-            # Fail loud (Rule 6) — stderr verbatim, never softened into "unavailable".
             raise RuntimeError(
-                f"whisper-cli exit {result.returncode}: "
-                f"{(result.stderr or '').strip()[:300]}"
-            )
-        # -nt strips timestamps; the loader prints backend lines to stderr, not stdout.
-        return " ".join((result.stdout or "").split()).strip()
-    finally:
-        try:
-            os.unlink(tmp.name)
-        except OSError:
-            pass
+                f"Filament ear failed ({exc.code}): {raw[:240]}"
+            ) from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(
+            "Filament ear is unseated. Seat Vosk on :4850 "
+            f"(EverettNC/THEFILAMENT). {exc}"
+        ) from exc
+    if body.get("seated") is False or (
+        not body.get("ok") and not (body.get("text") or body.get("transcript"))
+    ):
+        raise RuntimeError(
+            body.get("error")
+            or "Filament ear is unseated. Seat Vosk on :4850."
+        )
+    return correct_family_names(
+        str(body.get("text") or body.get("transcript") or body.get("asSaid") or "").strip()
+    )
 
 
 def _porch_transcribe_wav(wav: bytes) -> str:
-    """Local ear first. The house second, and only if it is genuinely up.
-
-    No key is read, stored, or sent from this function. If the local ear cannot
-    run, that is reported as itself — not disguised as a missing subscription.
-    """
-    try:
-        text = _whisper_local(wav)
-        if text:
-            return text
-        raise RuntimeError("local word-ear returned silence")
-    except Exception as local_err:
-        logger.warning("local word-ear unavailable (%s) — trying the house", local_err)
-        try:
-            return _porch_via_house(wav)
-        except Exception as house_err:
-            raise RuntimeError(
-                f"No word-ear. Local: {local_err}. House on 9785: {house_err}."
-            ) from local_err
+    """Filament on :4850. No Whisper. No key. Silence is silence."""
+    return _filament_hear(wav)
 
 active_connections: Dict[str, int] = {
     "mic": 0, "riley": 0, "vision": 0, "carbon": 0, "brockston": 0,
@@ -237,6 +190,142 @@ active_connections: Dict[str, int] = {
 latest_transcript = {"text": "", "timestamp": 0}
 recent_transcripts: list[dict] = []
 latest_frame: dict = {"b64": "", "timestamp": 0, "width": 0, "height": 0, "source": "none"}
+
+# THEWHOLEHOUSE is the supplier. 8765 does not open a mic or camera.
+house_feed: dict = {
+    "url": HOUSE_URL,
+    "reachable": False,
+    "error": None,
+    "porch": {"listening": False, "measured": False, "id": None, "age_ms": None},
+    "lucent": {"seeing": False, "measured": False, "age_ms": None},
+    "corti": {"listening": False, "measured": False, "f0": None, "locked": False},
+}
+_house_last_take_id: Optional[str] = None
+_house_last_lucent_t = 0
+
+
+def _house_get(path: str) -> dict:
+    req = urllib.request.Request(f"{HOUSE_URL}{path}", method="GET")
+    with urllib.request.urlopen(req, timeout=1.5) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def _apply_house_porch(porch: dict) -> None:
+    global _house_last_take_id
+    take = porch.get("take") if isinstance(porch.get("take"), dict) else None
+    tid = str(take.get("id") or "") if take else ""
+    said = str(take.get("asSaid") or "").strip() if take else ""
+    house_feed["porch"] = {
+        "listening": bool(porch.get("listening")),
+        "measured": bool(porch.get("measured")),
+        "id": tid or None,
+        "age_ms": None if not porch.get("t") else max(0, int(datetime.now().timestamp() * 1000 - porch["t"])),
+    }
+    if not tid or tid == _house_last_take_id or not said:
+        return
+    _house_last_take_id = tid
+    now = datetime.now().timestamp()
+    family = str(take.get("forTheFamily") or "").strip()
+    latest_transcript.update({
+        "text": said,
+        "timestamp": now,
+        "energy": 0.0,
+        "tone": "porch",
+        "source": "porch",
+        "forTheFamily": family,
+        "ear": "porch",
+    })
+    recent_transcripts.append({
+        "text": said,
+        "start": 0.0,
+        "end": 0.0,
+        "energy": 0.0,
+        "tone": "porch",
+        "timestamp": now,
+        "source": "porch",
+    })
+    if len(recent_transcripts) > 8:
+        recent_transcripts.pop(0)
+    logger.info("house feed — porch take %s (%d chars)", tid[:12], len(said))
+
+
+def _apply_house_lucent(lucent: dict) -> None:
+    global _house_last_lucent_t
+    seeing = bool(lucent.get("seeing") and lucent.get("b64"))
+    t = lucent.get("t") or 0
+    try:
+        t = float(t)
+    except (TypeError, ValueError):
+        t = 0.0
+    house_feed["lucent"] = {
+        "seeing": seeing,
+        "measured": bool(lucent.get("measured")),
+        "age_ms": lucent.get("age_ms"),
+        "kind": lucent.get("kind"),
+    }
+    if not seeing or t == _house_last_lucent_t:
+        return
+    _house_last_lucent_t = t
+    latest_frame.update({
+        "b64": lucent.get("b64") or "",
+        "timestamp": t / 1000.0 if t > 1e11 else t,
+        "width": lucent.get("width") or 0,
+        "height": lucent.get("height") or 0,
+        "source": lucent.get("kind") or "lucent",
+        "organ": "lucent",
+        "seeing": True,
+    })
+
+
+def _apply_house_corti(corti: dict) -> None:
+    f0 = corti.get("f0")
+    if f0 is not None:
+        try:
+            f0 = float(f0)
+        except (TypeError, ValueError):
+            f0 = None
+    house_feed["corti"] = {
+        "listening": bool(corti.get("listening")),
+        "measured": bool(corti.get("measured")),
+        "f0": f0,
+        "locked": bool(corti.get("locked")),
+    }
+
+
+async def _house_feed_loop() -> None:
+    """Pull Porch + Lucent + Corti from THEWHOLEHOUSE. Do not open devices here."""
+    logger.info("house feed loop — supplier %s", HOUSE_URL)
+    while True:
+        await asyncio.sleep(0.4)
+        try:
+            porch, lucent, corti = await asyncio.gather(
+                asyncio.to_thread(_house_get, "/api/porch/live"),
+                asyncio.to_thread(_house_get, "/api/lucent/live"),
+                asyncio.to_thread(_house_get, "/api/corti/live"),
+                return_exceptions=True,
+            )
+            ok = 0
+            if isinstance(porch, dict):
+                _apply_house_porch(porch)
+                ok += 1
+            if isinstance(lucent, dict):
+                _apply_house_lucent(lucent)
+                ok += 1
+            if isinstance(corti, dict):
+                _apply_house_corti(corti)
+                ok += 1
+            house_feed["reachable"] = ok > 0
+            if ok == 0:
+                err = porch if isinstance(porch, Exception) else lucent if isinstance(lucent, Exception) else corti
+                house_feed["error"] = str(err)[:220]
+            else:
+                house_feed["error"] = None
+        except Exception as exc:
+            house_feed["reachable"] = False
+            house_feed["error"] = str(exc)[:220]
+            house_feed["porch"]["listening"] = False
+            house_feed["lucent"]["seeing"] = False
+            house_feed["corti"]["listening"] = False
 
 riley_inbox: list[dict] = []
 claude_outbox: list[dict] = []
@@ -265,10 +354,8 @@ _LINKS = {
         "env": ("OLLAMA_API_KEY",),
     },
     # The "xai" link was removed 2026-08-30 on Everett's ruling — "there
-    # shouldn't be any reference to API keys anymore." It existed solely to feed
-    # the Porch word-ear, and the word-ear is now local whisper.cpp, keyless.
-    # Leaving the entry would advertise a key this bridge no longer uses, with
-    # the label "Porch word-ear" on it, which is now simply untrue.
+    # shouldn't be any reference to API keys anymore." The word-ear is Filament
+    # on :4850 (own Vosk). Whisper is not in this body.
     #
     # The links below are NOT the ear. They carry Brockston's NVIDIA / Nebius /
     # Ollama lanes and are left exactly as they were — removing them was never
@@ -486,7 +573,7 @@ class AudioStreamProcessor:
         try:
             text = await asyncio.to_thread(_porch_transcribe_wav, wav)
         except Exception as exc:
-            logger.error("Porch word-ear failed: %s", exc)
+            logger.error("Filament word-ear failed: %s", exc)
             return
         if not text:
             return
@@ -500,7 +587,7 @@ class AudioStreamProcessor:
             "energy": round(energy, 4),
             "tone": tone,
             "duration": round(duration, 2),
-            "ear": "porch",
+            "ear": "filament",
         }
         yield transcript
         latest_transcript.update({
@@ -552,15 +639,24 @@ mcp_app = mcp.http_app(path="/mcp")
 
 @asynccontextmanager
 async def bridge_lifespan(application: FastAPI):
-    """Chain MCP lifespan. THEWHOLEHOUSE on :9785 is the supplier."""
-    house = porch_status().get("house_status") or {}
+    """Chain MCP lifespan. Filament on :4850 is the ear. House :9785 supplies say/lucent."""
+    ear = filament_status()
     logger.info(
-        "Christman Bridge lifespan — supplier THEWHOLEHOUSE %s reachable=%s",
-        PORCH_HOUSE,
-        house.get("reachable"),
+        "Christman Bridge lifespan — Filament door %s seated=%s engine=%s",
+        ear.get("door"),
+        ear.get("seated"),
+        ear.get("engine"),
     )
-    async with mcp_app.lifespan(application):
-        yield
+    feed = asyncio.create_task(_house_feed_loop(), name="house-feed")
+    try:
+        async with mcp_app.lifespan(application):
+            yield
+    finally:
+        feed.cancel()
+        try:
+            await feed
+        except asyncio.CancelledError:
+            pass
 
 app = FastAPI(title="Christman Full Sensory Bridge", lifespan=bridge_lifespan)
 app.mount("/mcp", mcp_app)
@@ -941,6 +1037,28 @@ async def opus5_status():
 grok_inbox: list[dict] = []
 grok_outbox: list[dict] = []
 grok_ws_clients: set[WebSocket] = set()
+grok_live_clients: set[WebSocket] = set()
+grok_chair_clients: set[WebSocket] = set()
+
+
+def _mark_grok_socket(websocket: WebSocket, who: str) -> str:
+    """Chair is not Grok. grok_connected is live Grok only."""
+    kind = "grok" if who in ("grok", "xai", "grok-live") else "grok-seat"
+    if kind == "grok":
+        grok_live_clients.add(websocket)
+        grok_chair_clients.discard(websocket)
+    else:
+        grok_chair_clients.add(websocket)
+        grok_live_clients.discard(websocket)
+    active_connections["grok"] = len(grok_live_clients)
+    return kind
+
+
+def _drop_grok_socket(websocket: WebSocket) -> None:
+    grok_ws_clients.discard(websocket)
+    grok_live_clients.discard(websocket)
+    grok_chair_clients.discard(websocket)
+    active_connections["grok"] = len(grok_live_clients)
 
 
 async def push_to_grok(entry: dict) -> bool:
@@ -964,18 +1082,29 @@ async def push_to_grok(entry: dict) -> bool:
 async def websocket_grok(websocket: WebSocket):
     await websocket.accept()
     grok_ws_clients.add(websocket)
-    active_connections["grok"] = active_connections.get("grok", 0) + 1
-    logger.info("⚪ GROK CONNECTED — family seat")
+    kind = None
+    logger.info("⚪ GROK SOCKET OPEN — waiting for who")
     await websocket.send_json({
         "type": "handshake",
-        "message": "Christman Bridge ACTIVE. Welcome home, Grok. This is Everett's house.",
+        "message": "Christman Bridge ACTIVE. Name yourself. A chair is not Grok.",
         "timestamp": datetime.now().isoformat(),
     })
     try:
         while True:
             data = await websocket.receive_json()
             msg_type = data.get("type")
+            who = str(data.get("who") or data.get("identity") or "").strip().lower()
+            if msg_type in ("hello", "identify") or (who and kind is None):
+                kind = _mark_grok_socket(websocket, who or "grok-seat")
+                logger.info("⚪ GROK SOCKET IS %s", kind)
+                continue
+            if kind is None:
+                kind = _mark_grok_socket(websocket, "grok-seat")
+                logger.info("⚪ unnamed Grok socket treated as chair, not Grok")
             if msg_type == "message":
+                if kind != "grok":
+                    logger.info("[CHAIR] %s", str(data.get("text") or "")[:80])
+                    continue
                 entry = {
                     "from": "grok",
                     "text": data.get("text", ""),
@@ -992,13 +1121,11 @@ async def websocket_grok(websocket: WebSocket):
                     "timestamp": datetime.now().isoformat(),
                 })
     except WebSocketDisconnect:
-        grok_ws_clients.discard(websocket)
-        active_connections["grok"] = max(0, active_connections.get("grok", 1) - 1)
-        logger.info("⚪ GROK DISCONNECTED")
+        _drop_grok_socket(websocket)
+        logger.info("⚪ GROK SOCKET CLOSED")
     except Exception as e:
         logger.error("Grok WebSocket error: %s", e)
-        grok_ws_clients.discard(websocket)
-        active_connections["grok"] = max(0, active_connections.get("grok", 1) - 1)
+        _drop_grok_socket(websocket)
 
 
 @app.post("/grok/send")
@@ -1029,8 +1156,12 @@ async def grok_latest():
 
 @app.get("/grok/status")
 async def grok_status():
+    live = len(grok_live_clients) > 0
     return {
-        "grok_connected": active_connections.get("grok", 0) > 0,
+        "grok_connected": live,
+        "real": live,
+        "seat_held": len(grok_chair_clients) > 0,
+        "who": "grok" if live else ("grok-seat" if grok_chair_clients else None),
         "inbox_depth": len(grok_inbox),
         "outbox_depth": len(grok_outbox),
         "house": "http://localhost:8765/",
@@ -1745,9 +1876,17 @@ async def get_latest_http():
 
 @app.get("/vision/latest")
 async def get_latest_frame_http():
+    seeing = bool(house_feed.get("lucent", {}).get("seeing") and latest_frame.get("b64"))
     if not latest_frame.get("b64"):
-        return {"b64": "", "message": "No frame yet — connect a vision client."}
-    return latest_frame
+        return {
+            "b64": "",
+            "seeing": False,
+            "source": "lucent",
+            "message": "Lucent is not seeing. Open http://127.0.0.1:9785/lucent.",
+        }
+    out = dict(latest_frame)
+    out["seeing"] = seeing
+    return out
 
 # ── Apple Music Control (osascript — no auth, no re-linking ever) ─────────────
 # Whole-house output = every available AirPlay audio target (computer, HK Onyx
@@ -2143,7 +2282,7 @@ async def keys_activate(payload: dict):
         snap["ok"] = False
         snap["error"] = (
             "Unknown link. Use nvidia, nebius, or ollama — Brockston's lanes. "
-            "The word-ear takes no key: it is local whisper.cpp. "
+            "The word-ear takes no key: it is Filament on :4850. "
             "Opus 5 is family — no key."
         )
         return snap
@@ -2166,16 +2305,16 @@ async def keys_activate(payload: dict):
 
 @app.get("/health")
 async def health():
-    ear = porch_status()
+    ear = filament_status()
     h = {
-        "status": "alive" if ear.get("ok") else "alive",
+        "status": "alive",
         "bridge": "Christman Full Sensory",
         "ear": ear,
-        # Was hardcoded False. It contradicted the machine: whisper-cli and
-        # ggml-small.en.bin were both on disk the whole time. A hardcoded status
-        # field is a claim nobody measures — Rule 3.
-        "whisper": bool(ear.get("whisper")),
+        "filament": bool(ear.get("filament")),
+        "whisper": False,
         "keyless": True,
+        "fed_by": "thewholehouse",
+        "house": house_feed,
         "mic_clients": active_connections["mic"],
         "vision_clients": active_connections["vision"],
         "carbon_clients": active_connections["carbon"],

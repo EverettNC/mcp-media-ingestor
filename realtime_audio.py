@@ -20,8 +20,7 @@ app = FastAPI(title="MCP Real-Time Audio Bridge")
 # Shared buffer for latest transcript
 latest_transcript: dict = {"text": "", "start": 0.0, "end": 0.0, "language": "", "updated": False}
 
-# This legacy server is dead. Run main.py — the word-ear is local whisper.cpp,
-# with Porch on :9785 as a second path. Neither takes a key.
+# This legacy server is dead. Run main.py — the word-ear is Filament on :4850.
 model = None
 
 class AudioStreamProcessor:
@@ -34,7 +33,7 @@ class AudioStreamProcessor:
         """Process incoming audio bytes and yield transcripts in real time."""
         self.buffer.extend(audio_data)
         
-        # Convert to float32 numpy for Whisper
+        # Convert to float32 numpy for the (dead) local processor.
         audio_np = np.frombuffer(self.buffer, dtype=np.int16).astype(np.float32) / 32768.0
         
         if len(audio_np) / sample_rate < self.chunk_duration:
@@ -114,7 +113,7 @@ async def get_latest():
 # For testing / integration with MCP
 @app.get("/health")
 async def health():
-    return {"status": "alive", "audio_bridge": "ready", "model": "faster-whisper-small"}
+    return {"status": "dead", "audio_bridge": "use main.py", "ear": "filament", "door": 4850}
 
 if __name__ == "__main__":
     import uvicorn

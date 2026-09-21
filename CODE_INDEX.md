@@ -12,8 +12,8 @@
 | File | Role | How to run | Notes |
 |------|------|------------|-------|
 | `server.py` | Pure FastMCP media ingestor server | `uv run server.py` (see `.mcp.json`) | Registered MCP for Claude. Tools for images/video/audio + Riley bridge proxy. |
-| `main.py` | Full Sensory Bridge (FastAPI + WS + embedded MCP) | `python main.py` (uvicorn on 0.0.0.0:8765) | Mounts MCP at `/mcp`. Real-time Whisper, Riley tunnel, dashboard, Christman creative tools. |
-| `realtime_audio.py` | Standalone real-time audio bridge | `python realtime_audio.py` | Older/simpler WS + Whisper server on :8765. |
+| `main.py` | Full Sensory Bridge (FastAPI + WS + embedded MCP) | `python main.py` (uvicorn on 0.0.0.0:8765) | Mounts MCP at `/mcp`. Filament ear on :4850, Riley tunnel, dashboard, Christman creative tools. |
+| `realtime_audio.py` | Standalone real-time audio bridge | `python realtime_audio.py` | Dead. Run main.py. Word-ear is Filament on :4850. |
 | `_paths.py` | Path bootstrap for "Christman Family" imports | Imported by main.py | Hardcoded roots: Claude-Cowork/mcp-media-ingestor, Claude-Cowork, /Volumes/LIFE |
 
 ---
@@ -24,12 +24,12 @@
 - `read_image(file_path)` → ImageContent (vision for Claude)
 - `get_video_metadata(video_path)` → ffprobe string
 - `extract_video_frames(video_path, interval_seconds=5.0)` → list[ImageContent] (capped ~120 frames)
-- `transcribe_audio(file_path, model_size="base")` → timestamped transcript (faster-whisper via ffmpeg)
+- `transcribe_audio(file_path, model_size="base")` → transcript via Filament :4850 (ffmpeg → wav → Vosk)
 - `describe_audio_bridge()`
 - `get_latest_transcript()`
 - `get_riley_message()`, `send_to_riley(text)`, `riley_status()`
 
-**Requires**: ffmpeg in PATH, faster-whisper.
+**Requires**: ffmpeg in PATH, Filament seated on :4850.
 
 ### main.py (Full Sensory Bridge MCP tools, async)
 Duplicates several bridge/Riley tools + adds:
@@ -89,11 +89,11 @@ mcp-media-ingestor/
 ### 1. Media Ingestion (server.py core)
 - Image: PIL → base64 ImageContent (thumbnail 2000px)
 - Video: ffprobe metadata + ffmpeg fps sampling → frames as ImageContent
-- Audio: ffmpeg extract → faster-whisper (int8 CPU) → timestamped lines
+- Audio: ffmpeg extract → Filament :4850 (Vosk) → transcript
 - Bridge proxy: HTTP calls to localhost:8765 for live transcripts/Riley tunnel
 
 ### 2. Real-time Audio Pipeline
-- `AudioStreamProcessor` (in main.py + realtime_audio.py): buffers PCM16, VAD-ish silence tail, transcribes with Whisper when tail quiet or max buffer.
+- `AudioStreamProcessor` (in main.py): buffers PCM16, VAD-ish silence tail, transcribes with Filament on :4850 when tail quiet or max buffer.
 - Clients: `mic_capture.py` (general), `continuous_mic.py` (device 4 / Maonocaster).
 - Servers expose `/ws/audio`, `/latest`, `/health`, `/riley/*`.
 - `voice_loop.py`: simple poll + speak loop for local feedback.
@@ -143,7 +143,7 @@ Two RileyBridge impls exist (RILEY.py is the one wired with SovereignDisconnect;
 ---
 
 ## Dependencies (pyproject.toml)
-fastmcp, pillow, faster-whisper==1.2.1, onnxruntime==1.23.2, ctranslate2, av, fastapi, uvicorn, websockets, numpy, sounddevice, requests.
+fastmcp, pillow, onnxruntime==1.23.2, ctranslate2, av, fastapi, uvicorn, websockets, numpy, sounddevice, requests.
 
 Optional in code: mido (MIDI).
 

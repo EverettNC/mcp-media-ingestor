@@ -971,8 +971,8 @@
 
       <div class="panel-block">
         <div class="panel-header">
-          <div class="dot alive"></div>
-          LIVE TRANSCRIPT · PORCH WORD-EAR · 9785
+          <div class="dot" id="ear-dot"></div>
+          LIVE TRANSCRIPT · <span id="ear-label">WORD-EAR</span>
         </div>
         <div id="transcript-display">
           <span class="speaker" id="transcript-who">EVERETT</span>
@@ -982,12 +982,12 @@
 
       <div class="panel-block">
         <div class="panel-header">
-          <div class="dot alive"></div>
+          <div class="dot" id="vision-header-dot"></div>
           LIVE VIEW · TOTAL VISION
         </div>
         <div style="padding:12px; background:#05050f; text-align:center;">
           <img id="live-view" style="max-width:100%; max-height:180px; border:1px solid var(--border); border-radius:6px; display:none;" alt="live vision"/>
-          <div id="vision-placeholder" style="font-size:11px; color:var(--muted); padding:12px 0;">No live view yet — run vision_capture.py</div>
+          <div id="vision-placeholder" style="font-size:11px; color:var(--muted); padding:12px 0;">Lucent is not seeing — open the house at :9785/lucent</div>
         </div>
       </div>
 
@@ -1282,7 +1282,6 @@
         <option value="nvidia">NVIDIA</option>
         <option value="nebius">Nebius</option>
         <option value="ollama">Ollama</option>
-        <option value="xai">xAI · Porch word-ear</option>
       </select>
     </div>
     <div class="drop-box" id="drop-box">
@@ -1371,13 +1370,25 @@
       const d = await r.json();
       document.getElementById('bridge-dot').className = 'dot alive';
       document.getElementById('bridge-status').textContent = 'BRIDGE ALIVE';
-      const micCount = d.mic_clients || 0;
+      const ear = d.ear || {};
+      const earOk = !!ear.ok;
+      const earDot = document.getElementById('ear-dot');
+      if (earDot) earDot.className = earOk ? 'dot alive' : 'dot dead';
+      const earLabel = document.getElementById('ear-label');
+      if (earLabel) earLabel.textContent = earOk ? (ear.ear || 'WORD-EAR') : 'EAR DARK';
+      const house = d.house || {};
+      const porchLive = !!(house.porch && house.porch.listening);
+      const cortiLive = !!(house.corti && house.corti.listening);
+      const lucentLive = !!(house.lucent && house.lucent.seeing);
+      const micCount = (porchLive || cortiLive) ? 1 : (d.mic_clients || 0);
       document.getElementById('stat-mic').textContent = micCount;
       document.getElementById('mic-dot').className = micCount > 0 ? 'dot alive' : 'dot dead';
-      const visionCount = d.vision_clients || 0;
+      const visionCount = lucentLive ? 1 : (d.vision_clients || 0);
       const vs = document.getElementById('stat-vision');
       if (vs) vs.textContent = visionCount;
       document.getElementById('vision-dot').className = visionCount > 0 ? 'dot alive' : 'dot dead';
+      const visionHeader = document.getElementById('vision-header-dot');
+      if (visionHeader) visionHeader.className = visionCount > 0 ? 'dot alive' : 'dot dead';
       const brockstonCount = d.brockston_clients || 0;
       const brockstonDot = document.getElementById('brockston-dot');
       if (brockstonDot) brockstonDot.className = brockstonCount > 0 ? 'dot alive' : 'dot dead';
@@ -1411,6 +1422,10 @@
       }
     } catch(e) {
       const bdot = document.getElementById('brain-dot'); if (bdot) bdot.className = 'dot dead';
+      const br = document.getElementById('bridge-dot'); if (br) br.className = 'dot dead';
+      const bs = document.getElementById('bridge-status'); if (bs) bs.textContent = 'BRIDGE DOWN';
+      const ed = document.getElementById('ear-dot'); if (ed) ed.className = 'dot dead';
+      const gd = document.getElementById('grok-dot'); if (gd) gd.className = 'dot dead';
     }
   }
 
@@ -1739,11 +1754,12 @@
       const r = await fetch('/vision/latest');
       const d = await r.json();
       const b64 = d.b64 || '';
+      const seeing = !!d.seeing;
       const visionDot = document.getElementById('vision-dot');
       const stat = document.getElementById('stat-vision');
       if (b64) {
-        visionDot.className = 'dot alive';
-        if (stat) stat.textContent = '1';
+        visionDot.className = seeing ? 'dot alive' : 'dot dead';
+        if (stat) stat.textContent = seeing ? '1' : '0';
         const img = document.getElementById('live-view');
         const ph = document.getElementById('vision-placeholder');
         if (b64 !== lastVisionB64) {

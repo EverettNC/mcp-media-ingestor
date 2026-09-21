@@ -52,6 +52,8 @@ def _start_house() -> None:
     log = open(log_path, "ab", buffering=0)
     env = os.environ.copy()
     env["PATH"] = "/usr/local/bin:/opt/homebrew/bin:" + env.get("PATH", "")
+    env["VITE_AUTH_ENABLED"] = "false"
+    env["PORT"] = "9785"
     subprocess.Popen(
         [NPM, "run", "dev"],
         cwd=str(HOUSE),

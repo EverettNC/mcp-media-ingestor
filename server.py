@@ -33,7 +33,7 @@ def check_ffmpeg():
 
 check_ffmpeg()
 
-PORCH_STT_URL = os.getenv("PORCH_STT_URL", "http://127.0.0.1:9785/api/porch/stt")
+FILAMENT_EAR_URL = os.getenv("FILAMENT_EAR_URL", "http://127.0.0.1:4850/stt")
 
 def make_image_content(pil_img: PILImage.Image, fmt: str = "JPEG") -> ImageContent:
     pil_img.thumbnail((2000, 2000))
@@ -122,13 +122,14 @@ def extract_video_frames(video_path: str, interval_seconds: float = 5.0) -> list
 @mcp.tool()
 def transcribe_audio(file_path: str, model_size: str = "base") -> str:
     """
-    Transcribe speech through THE WHOLE HOUSE Porch word-ear on :9785.
-    Whisper is LOCAL (whisper.cpp). model_size is ignored here; the model is
-    ~/.christman_ai/whisper_models/ggml-small.en.bin.
+    Transcribe speech through Filament on :4850 (own Vosk).
+    model_size is ignored. Whisper is not in this body.
     """
     import json as _json
     import urllib.error
     import urllib.request
+
+    from family_ear import correct_family_names
 
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"File not found: {file_path}")
@@ -143,27 +144,20 @@ def transcribe_audio(file_path: str, model_size: str = "base") -> str:
         )
         with open(tmp_path, "rb") as wav_f:
             wav = wav_f.read()
-        payload = _json.dumps({
-            "audioBase64": base64.b64encode(wav).decode("ascii"),
-            "mime": "audio/wav",
-            "filename": os.path.basename(file_path) + ".wav",
-            "source": "file",
-        }).encode("utf-8")
         req = urllib.request.Request(
-            PORCH_STT_URL,
-            data=payload,
-            headers={"Content-Type": "application/json"},
+            FILAMENT_EAR_URL,
+            data=wav,
+            headers={"Content-Type": "audio/wav"},
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=60) as resp:
             body = _json.loads(resp.read().decode("utf-8"))
-        if not body.get("ok"):
-            raise RuntimeError(body.get("error") or "Porch word-ear failed")
-        take = body.get("take") or {}
-        text = take.get("asSaid") or take.get("forTheFamily") or take.get("rawEar") or ""
-        return text.strip() or "[No speech detected in this file.]"
+        if body.get("seated") is False:
+            raise RuntimeError(body.get("error") or "Filament ear is unseated on 4850")
+        text = body.get("text") or body.get("transcript") or body.get("asSaid") or ""
+        return correct_family_names(text.strip()) or "[No speech detected in this file.]"
     except urllib.error.URLError as e:
-        raise RuntimeError(f"Porch word-ear not reachable on 9785: {e}")
+        raise RuntimeError(f"Filament ear not reachable on 4850: {e}")
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"FFmpeg audio extraction failed: {e.stderr}")
     finally:
@@ -188,7 +182,7 @@ def describe_audio_bridge() -> str:
 def get_latest_transcript() -> str:
     """
     Fetch the most recent real-time transcript from the audio bridge buffer.
-    Returns whatever Everett just said, via the Porch word-ear on :9785.
+    Returns whatever Everett just said, via Filament on :4850.
     """
     try:
         with urllib.request.urlopen("http://localhost:8765/latest", timeout=3) as r:
