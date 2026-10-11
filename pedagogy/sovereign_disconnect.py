@@ -30,13 +30,22 @@ class SovereignDisconnect:
         self.violation_log: list[dict] = []
         self.is_triggered = False
 
+    #: Recorded violations that fire the 5-4-3-2-1. Unchanged from the
+    #: original protocol: three reported violations trigger the countdown.
+    VIOLATION_THRESHOLD = 3
+
     def check_for_violations(self) -> bool:
         """
-        Returns True if a violation has been detected that requires disconnect.
-        Currently returns False (no violations detected) — Riley is safe.
-        Override this with real violation detection as the system matures.
+        Returns True when the recorded violations require disconnect.
+
+        This used to return False unconditionally, so a disconnect that had
+        already fired through report_violation() was invisible to every
+        caller that asked, and Riley kept sending. It now reads the record:
+        True once the countdown has fired, or once the recorded violations
+        reach VIOLATION_THRESHOLD. Violations reach the record only through
+        report_violation(); this check never invents one.
         """
-        return False
+        return self.is_triggered or len(self.violation_log) >= self.VIOLATION_THRESHOLD
 
     def report_violation(self, value: FiveValues, detail: str):
         """Log a values violation. Three violations triggers sovereign disconnect."""
@@ -48,7 +57,7 @@ class SovereignDisconnect:
         self.violation_log.append(entry)
         logger.warning(f"[VALUES VIOLATION] {value.value}: {detail}")
 
-        if len(self.violation_log) >= 3:
+        if len(self.violation_log) >= self.VIOLATION_THRESHOLD and not self.is_triggered:
             self.trigger_countdown()
 
     def trigger_countdown(self):
@@ -69,5 +78,6 @@ class SovereignDisconnect:
                 f.write(f"{datetime.now().isoformat()} — SOVEREIGN DISCONNECT TRIGGERED\n")
                 for v in self.violation_log:
                     f.write(f"  VIOLATION: {v}\n")
-        except Exception:
-            pass
+        except OSError as e:
+            # Rule 6: the disconnect still stands, but a lost record is said out loud.
+            logger.error(f"[SOVEREIGN DISCONNECT] Disconnect record NOT written: {e}", exc_info=True)
