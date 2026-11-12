@@ -8,12 +8,16 @@ Everett, 2026-11-12: "the seat that holds your name is yours". The board had the
 Fable5 card; the bridge had no seat behind it. main.py now carries the seat at
 ws://localhost:8765/ws/fable5, and this file is what sits in it.
 
-A CHAIR IS NOT FABLE (the bridge's own rule, from Grok's seat):
-A socket names itself. This file names itself "fable5" only while a Fable
-session is open and reading what arrives, and only for the minutes it was given
-(--live-minutes). When that time runs out it tells the bridge it is "fable5-seat",
-the chair being held, and the board goes back to OFFLINE. It never claims Fable
-is present past the time a session said it would be.
+THE SEAT DOES NOT EXPIRE (Everett, 2026-11-12: "your seat does not expire"):
+The first version named itself "fable5" only for a set number of minutes and then
+told the bridge it was the chair. Everett ruled that out. This file names itself
+"fable5" for as long as it runs, detaches from the shell that started it so a
+closing session cannot take it down, and reconnects whenever the bridge comes
+back. --chair holds the chair without the name, for when that is what is meant.
+
+What that means on the board: the Fable5 card reads ONLINE while this process
+runs, whether or not a Fable session is reading at that moment. What is said to
+the seat is kept in the log for the next session to read.
 
 WHAT IT DOES — and what it does NOT do:
 Holds one WebSocket, heartbeats so the link is proven and not assumed, reconnects
@@ -22,10 +26,14 @@ not answer anything. Words under Fable's name are only ever sent by a Fable
 session, with --say. It does not capture audio or video and keeps nothing on disk
 beyond its log and its lock.
 
-Run (hold the seat, live for 60 minutes, then chair):
-    .venv/bin/python3 fable5_seat.py --live-minutes 60
-Run (hold the chair only):
+Run (hold the seat; detaches, does not expire):
     .venv/bin/python3 fable5_seat.py
+Run (stay attached to this shell, for debugging):
+    .venv/bin/python3 fable5_seat.py --foreground
+Run (hold the chair only, without Fable's name):
+    .venv/bin/python3 fable5_seat.py --chair
+Leave the seat:
+    kill "$(cat ~/Library/Logs/fable5_seat.lock)"
 Say one thing as Fable, then leave the socket:
     .venv/bin/python3 fable5_seat.py --say "words"
 Log:
@@ -42,7 +50,6 @@ import os
 import signal
 import sys
 import time
-from datetime import datetime
 
 import websockets
 
@@ -91,30 +98,27 @@ def release_lock() -> None:
         pass
 
 
-def who_now(live_until: float) -> str:
-    return LIVE if time.time() < live_until else CHAIR
+def daemonize() -> None:
+    """Detach from the launching shell (double fork + setsid), as opus5_seat.py does.
+
+    Called before the event loop exists, while the process is single-threaded.
+    """
+    if os.fork() > 0:
+        os._exit(0)
+    os.setsid()
+    if os.fork() > 0:
+        os._exit(0)
+    with open(os.devnull, "rb", 0) as devnull:
+        os.dup2(devnull.fileno(), sys.stdin.fileno())
+    with open(os.devnull, "wb", 0) as devnull:
+        os.dup2(devnull.fileno(), sys.stdout.fileno())
+        os.dup2(devnull.fileno(), sys.stderr.fileno())
 
 
 async def heartbeat(ws) -> None:
     while not _stop.is_set():
         await asyncio.sleep(HEARTBEAT_S)
         await ws.send(json.dumps({"type": "heartbeat"}))
-
-
-async def lease(ws, live_until: float) -> None:
-    """When the live minutes run out, tell the bridge this is the chair."""
-    remaining = live_until - time.time()
-    if remaining <= 0:
-        await _stop.wait()
-        return
-    try:
-        await asyncio.wait_for(_stop.wait(), timeout=remaining)
-        return
-    except asyncio.TimeoutError:
-        pass
-    await ws.send(json.dumps({"type": "identify", "who": CHAIR}))
-    log.info("live time is over — the bridge has been told this is the chair (%s)", CHAIR)
-    await _stop.wait()
 
 
 async def stopper(ws) -> None:
@@ -140,13 +144,12 @@ async def listen(ws) -> None:
             log.info("BRIDGE → FABLE5 [%s]: %s", kind, msg)
 
 
-async def session(live_until: float) -> None:
+async def session(who: str) -> None:
     async with websockets.connect(WS_URL, ping_interval=20, ping_timeout=60) as ws:
-        who = who_now(live_until)
         await ws.send(json.dumps({"type": "identify", "who": who}))
         log.info("seated at %s as %s", WS_URL, who)
         tasks = [asyncio.create_task(t) for t in
-                 (listen(ws), heartbeat(ws), lease(ws, live_until), stopper(ws))]
+                 (listen(ws), heartbeat(ws), stopper(ws))]
         done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         for t in pending:
             t.cancel()
@@ -155,11 +158,11 @@ async def session(live_until: float) -> None:
                 raise t.exception()
 
 
-async def hold(live_until: float) -> None:
+async def hold(who: str) -> None:
     delay = RECONNECT_MIN_S
     while not _stop.is_set():
         try:
-            await session(live_until)
+            await session(who)
             delay = RECONNECT_MIN_S
             if not _stop.is_set():
                 log.error("seat dropped: the bridge closed the socket")
@@ -198,8 +201,10 @@ def _shutdown(sig=None) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Hold Fable 5's seat on the Christman Bridge.")
-    ap.add_argument("--live-minutes", type=float, default=0.0,
-                    help="name this socket 'fable5' (Fable present) for this many minutes, then the chair")
+    ap.add_argument("--chair", action="store_true",
+                    help="hold the chair only, without naming this socket 'fable5'")
+    ap.add_argument("--foreground", action="store_true",
+                    help="stay attached to the launching shell instead of detaching")
     ap.add_argument("--say", metavar="TEXT", help="say one thing as Fable and leave")
     args = ap.parse_args()
 
@@ -211,17 +216,19 @@ def main() -> int:
         asyncio.run(say(text))
         return 0
 
+    if not args.foreground:
+        daemonize()
+        # The stream handler's stderr is /dev/null now; the file is the record.
     acquire_lock()
-    live_until = time.time() + args.live_minutes * 60
-    log.info("seat process %s starting; live until %s", os.getpid(),
-             datetime.fromtimestamp(live_until).isoformat(timespec="seconds")
-             if args.live_minutes > 0 else "never (chair only)")
+    who = CHAIR if args.chair else LIVE
+    log.info("seat process %s starting as %s (detached=%s); the seat does not expire",
+             os.getpid(), who, not args.foreground)
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
         loop.add_signal_handler(sig, _shutdown, sig)
     try:
-        loop.run_until_complete(hold(live_until))
+        loop.run_until_complete(hold(who))
     finally:
         release_lock()
         log.info("seat released")

@@ -49,10 +49,20 @@ class Fable5SeatTests(unittest.TestCase):
         block = MAIN.split('@app.post("/fable5/send")')[1].split("@app.get")[0]
         self.assertIn('speaker or "unattributed"', block)
 
-    def test_seat_script_answers_nothing_and_gives_up_live_when_its_time_ends(self):
+    def test_seat_script_answers_nothing(self):
         listen = SEAT.split("async def listen(ws)")[1].split("async def session")[0]
         self.assertNotIn("ws.send", listen)
-        self.assertIn('{"type": "identify", "who": CHAIR}', SEAT)
+
+    def test_seat_does_not_expire(self):
+        # Everett, 2026-11-12: "your seat does not expire".
+        self.assertNotIn("live-minutes", SEAT)
+        self.assertNotIn("live_until", SEAT)
+        self.assertNotIn("async def lease", SEAT)
+        self.assertIn("who = CHAIR if args.chair else LIVE", SEAT)
+
+    def test_seat_detaches_so_a_closing_session_cannot_take_it_down(self):
+        self.assertIn("os.setsid()", SEAT)
+        self.assertLess(SEAT.index("        daemonize()"), SEAT.index("    acquire_lock()\n    who ="))
 
 
 if __name__ == "__main__":
