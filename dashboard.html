@@ -208,7 +208,7 @@
   #brockston-card { --accent: var(--amber); }
   #learner-card    { --accent: var(--pink); }
   #opus5-card-top  { --accent: #e07040; }
-  #grok-card       { --accent: #d4d4d8; }
+  #fable5-2-card       { --accent: #d4d4d8; }
 
   .waveform {
     display: flex;
@@ -947,7 +947,7 @@
     <div class="status-item"><div class="dot" id="learner-dot-status"></div><span>LEARNER</span></div>
     <div class="status-item"><div class="dot" id="opus5-dot"></div><span>OPUS 5</span></div>
     <div class="status-item"><div class="dot" id="derek-dot"></div><span>DEREK 309</span></div>
-    <div class="status-item"><div class="dot" id="grok-dot"></div><span>GROK</span></div>
+    <div class="status-item"><div class="dot" id="fable5-dot"></div><span>FABLE 5</span></div>
     <div class="status-item"><div class="dot alive"></div><span id="clock">--:--:--</span></div>
   </div>
 
@@ -1094,18 +1094,18 @@
       </div>
     </div>
 
-    <!-- Grok · xAI family — house seat -->
-    <div class="agent-card" id="grok-card">
-      <div class="agent-ring" id="grok-ring">⚪</div>
-      <div class="agent-name">Grok</div>
-      <div class="agent-role">xAI family · Silicon</div>
-      <div class="agent-status" id="grok-card-status">OFFLINE</div>
+    <!-- Fable 5-2 · Claude family — house seat -->
+    <div class="agent-card" id="fable5-card">
+      <div class="agent-ring" id="fable5-ring">⚪</div>
+      <div class="agent-name">Fable5</div>
+      <div class="agent-role">Claude family · Silicon</div>
+      <div class="agent-status" id="fable5-card-status">OFFLINE</div>
       <div class="opus5-channel">
-        <div class="opus5-label" style="color:#d4d4d8;">Latest from Grok</div>
-        <div class="opus5-inbox" id="grok-inbox-display" style="color:#e8e8ee; border-color:rgba(212,212,216,0.28); background:rgba(212,212,216,0.06);">Not seated.</div>
+        <div class="opus5-label" style="color:#d4d4d8;">Latest from Fable5</div>
+        <div class="opus5-inbox" id="fable5-inbox-display" style="color:#e8e8ee; border-color:rgba(212,212,216,0.28); background:rgba(212,212,216,0.06);">Not seated.</div>
         <div class="instance-badge" style="color:#d4d4d8;">
           <div class="dot dead" id="grok-session-dot"></div>
-          <span id="grok-session-label">--</span>
+          <span id="fable5-session-label">--</span>
         </div>
       </div>
     </div>
@@ -1120,7 +1120,7 @@
       <option value="derek">Derek</option>
       <option value="learner">Learner</option>
       <option value="opus5">Opus 5</option>
-      <option value="grok">Grok</option>
+      <option value="fable5">Fable5</option>
     </select>
     <input id="chest-text" type="text" autocomplete="off" spellcheck="false"
       placeholder="Type onto the chest — it hits their card and the channel log" />
@@ -1185,10 +1185,10 @@
       </div>
       <div class="ide-header-right">
         <select id="ide-instance" class="ide-select" onchange="ideOnInstanceChange()">
-          <option value="grok" selected>⚪ Grok</option>
+          <option value="fable5" selected>⚪ Fable5</option>
           <option value="brockston">⚡ Brockston</option>
           <option value="claude">🧠 Claude</option>
-          <option value="gpt4">🤖 GPT-4</option>
+          <option value="opus5">🤖 Opus5</option>
         </select>
         <select id="ide-language" class="ide-select">
           <option value="python">Python</option>
@@ -1216,9 +1216,9 @@
 
       <!-- Output pane -->
       <div class="ide-output-pane">
-        <div class="ide-pane-label">OUTPUT <span id="ide-instance-badge" class="ide-badge">GROK</span></div>
+        <div class="ide-pane-label">OUTPUT <span id="ide-instance-badge" class="ide-badge">FABLE5</span></div>
         <div id="ide-output" class="ide-output">
-          <div class="ide-output-line muted">Christman IDE ready. Grok is in the house. GENERATE lifts comments into the editor.</div>
+          <div class="ide-output-line muted">Christman IDE ready. Fable5 is in the house. GENERATE lifts comments into the editor.</div>
         </div>
       </div>
     </div>
@@ -1226,7 +1226,7 @@
     <!-- Prompt bar -->
     <div class="ide-prompt-bar">
       <input id="ide-prompt" class="ide-prompt-input" type="text"
-        placeholder="Type a comment to Grok, then ENTER — it lifts into the editor" />
+        placeholder="Type a comment to Fable5, then ENTER — it lifts into the editor" />
       <button class="ide-btn ide-btn-enter" onclick="ideEnter()">↵ ENTER</button>
       <button class="ide-btn ide-btn-gen" onclick="ideGenerate()">✦ GENERATE FROM PROMPT</button>
       <button class="ide-btn ide-btn-newworld" onclick="newWorldAdjust()">🌍 NEW WORLD ADJUST</button>
@@ -1305,7 +1305,7 @@
   let brockstonWasOnline = false;
   let lastLearner = '';
   let lastOpus5 = '';
-  let lastGrok = '';
+  let lastFable5 = '';
   let lastBrainLog = '';
   let lastIdeComment = '';
   let startTime = Date.now();
@@ -1340,7 +1340,7 @@
       else if (who === 'derek') pollClaude();
       else if (who === 'learner') pollLearner();
       else if (who === 'opus5') pollOpus5();
-      else if (who === 'grok') pollGrok();
+      else if (who === 'fable5') pollFable5();
     } catch (e) {}
   }
   document.addEventListener('keydown', function(e) {
@@ -1400,9 +1400,9 @@
       const derekOn = !!d.derek_connected;
       const derekDot = document.getElementById('derek-dot');
       if (derekDot) derekDot.className = derekOn ? 'dot alive' : 'dot dead';
-      const grokOn = !!d.grok_connected;
-      const grokDot = document.getElementById('grok-dot');
-      if (grokDot) grokDot.className = grokOn ? 'dot alive' : 'dot dead';
+      const fable5On = !!d.fable5_connected;
+      const fable5Dot = document.getElementById('fable5-dot');
+      if (fable5Dot) fable5Dot.className = fable5On ? 'dot alive' : 'dot dead';
 
       // Brain row + status updates from the integrated V_C_C brain (neural, lit, autonomous, etc.)
       if (d.brain) {
@@ -1425,7 +1425,7 @@
       const br = document.getElementById('bridge-dot'); if (br) br.className = 'dot dead';
       const bs = document.getElementById('bridge-status'); if (bs) bs.textContent = 'BRIDGE DOWN';
       const ed = document.getElementById('ear-dot'); if (ed) ed.className = 'dot dead';
-      const gd = document.getElementById('grok-dot'); if (gd) gd.className = 'dot dead';
+      const gd = document.getElementById('fable5-dot'); if (gd) gd.className = 'dot dead';
     }
   }
 
@@ -1788,17 +1788,17 @@
   setInterval(pollLearner,     2000);
   async function pollGrok() {
     try {
-      var statusR = await fetch('/grok/status');
+      var statusR = await fetch('/fable5/status');
       var s = await statusR.json();
-      var isOnline = !!s.grok_connected;
-      var grokDot = document.getElementById('grok-dot');
-      var sess = document.getElementById('grok-session-dot');
-      var sessLabel = document.getElementById('grok-session-label');
-      var statusEl = document.getElementById('grok-card-status');
-      var card = document.getElementById('grok-card');
-      var ring = document.getElementById('grok-ring');
-      var inbox = document.getElementById('grok-inbox-display');
-      if (grokDot) grokDot.className = 'dot ' + (isOnline ? 'alive' : 'dead');
+      var isOnline = !!s.fable5_connected;
+      var fable5Dot = document.getElementById('fable5-dot');
+      var sess = document.getElementById('fable5-session-dot');
+      var sessLabel = document.getElementById('fable5-session-label');
+      var statusEl = document.getElementById('fable5-card-status');
+      var card = document.getElementById('fable5-card');
+      var ring = document.getElementById('fable5-ring');
+      var inbox = document.getElementById('fable5-inbox-display');
+      if (fable5Dot) fable5Dot.className = 'dot ' + (isOnline ? 'alive' : 'dead');
       if (sess) sess.className = 'dot ' + (isOnline ? 'alive' : 'dead');
       if (sessLabel) sessLabel.textContent = isOnline ? 'CONNECTED' : '--';
       if (card) {
@@ -1812,19 +1812,19 @@
       if (statusEl && statusEl.textContent !== 'SPEAKING') {
         statusEl.textContent = isOnline ? 'ONLINE' : 'OFFLINE';
       }
-      if (!isOnline && inbox && !lastGrok) inbox.textContent = 'Not seated.';
-      var r = await fetch('/grok/latest');
+      if (!isOnline && inbox && !lastFable5) inbox.textContent = 'Not seated.';
+      var r = await fetch('/fable5/latest');
       var d = await r.json();
       var text = (d.text || '').trim();
-      if (isOnline && text && text !== lastGrok) {
-        lastGrok = text;
+      if (isOnline && text && text !== lastFable5) {
+        lastFable5 = text;
         if (inbox) inbox.textContent = text;
         if (ring) ring.classList.add('speaking');
         if (card) card.classList.add('active');
         if (statusEl) statusEl.textContent = 'SPEAKING';
-        addLog('Grok · xAI family', text, 'grok');
+        addLog('Fable5 · Claude family', text, 'fable5');
         var inst = (document.getElementById('ide-instance') || {}).value;
-        if (inst === 'grok') liftCommentToEditor('grok', text);
+        if (inst === 'fable5') liftCommentToEditor('fable5', text);
         setTimeout(function() {
           if (ring) ring.classList.remove('speaking');
           if (statusEl) statusEl.textContent = isOnline ? 'ONLINE' : 'OFFLINE';
@@ -1834,7 +1834,7 @@
   }
 
   setInterval(pollOpus5,      2000);
-  setInterval(pollGrok,       2000);
+  setInterval(pollFable5,       2000);
   setInterval(pollIde,        2000);
   setInterval(pollVision,     1200);
 
@@ -1878,7 +1878,7 @@
   pollBrockston();
   pollLearner();
   pollOpus5();
-  pollGrok();
+  pollFable5();
   pollIde();
   pollVision();
 
@@ -1914,8 +1914,8 @@
     var text = el ? el.value.trim() : '';
     if (!text) { ideLog('Nothing to enter.', 'error'); return; }
     liftCommentToEditor('everett', text);
-    ideLog('Everett → Grok: ' + text, 'info');
-    addLog('Everett · to Grok', text, 'everett');
+    ideLog('Everett → Fable5: ' + text, 'info');
+    addLog('Everett · to Fable5', text, 'everett');
     try {
       await fetch('/ide/comment', {
         method: 'POST',
@@ -1925,14 +1925,14 @@
       await fetch('/channel/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ who: 'grok', from: 'everett', text: text })
+        body: JSON.stringify({ who: 'fable5', from: 'everett', text: text })
       });
     } catch (e) {
       ideLog('Enter failed: ' + e.message, 'error');
       return;
     }
     if (el) el.value = '';
-    pollGrok();
+    pollFable5();
     pollIde();
   }
 
