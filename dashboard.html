@@ -450,6 +450,7 @@
   .log-entry.learner    { border-color: var(--pink); }
   .log-entry.opus5      { border-color: #e07040; }
   .log-entry.grok       { border-color: #d4d4d8; }
+  .log-entry.fable5     { border-color: #d4d4d8; }
   .log-entry .log-who {
     font-size: 9px;
     letter-spacing: 2px;
@@ -1104,7 +1105,7 @@
         <div class="opus5-label" style="color:#d4d4d8;">Latest from Fable5</div>
         <div class="opus5-inbox" id="fable5-inbox-display" style="color:#e8e8ee; border-color:rgba(212,212,216,0.28); background:rgba(212,212,216,0.06);">Not seated.</div>
         <div class="instance-badge" style="color:#d4d4d8;">
-          <div class="dot dead" id="grok-session-dot"></div>
+          <div class="dot dead" id="fable5-session-dot"></div>
           <span id="fable5-session-label">--</span>
         </div>
       </div>
@@ -1786,7 +1787,7 @@
   setInterval(pollClaude,     2000);
   setInterval(pollBrockston,  2000);
   setInterval(pollLearner,     2000);
-  async function pollGrok() {
+  async function pollFable5() {
     try {
       var statusR = await fetch('/fable5/status');
       var s = await statusR.json();
