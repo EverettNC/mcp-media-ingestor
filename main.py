@@ -185,7 +185,7 @@ def _porch_transcribe_wav(wav: bytes) -> str:
 
 active_connections: Dict[str, int] = {
     "mic": 0, "riley": 0, "vision": 0, "carbon": 0, "brockston": 0,
-    "opus5": 0, "derek": 0, "grok": 0,
+    "opus5": 0, "derek": 0, "grok": 0, "fable5": 0,
 }
 latest_transcript = {"text": "", "timestamp": 0}
 recent_transcripts: list[dict] = []
@@ -476,6 +476,9 @@ if str(_VCC_ROOT / "brain") not in sys.path:
     sys.path.insert(0, str(_VCC_ROOT / "brain"))
 
 BRAIN_OK = False
+# Why the brain did not load, in the loader's own words. None when it loaded.
+# The board shows this instead of a row that reads as though the brain were on.
+BRAIN_REASON: Optional[str] = None
 neural_core = None
 lit_crawler = None
 behavior_cap = None
@@ -516,6 +519,7 @@ try:
 except Exception as be:
     logger.warning(f"Brain limited: {be}")
     BRAIN_OK = False
+    BRAIN_REASON = f"{type(be).__name__}: {be}"
 # ─────────────────────────────────────────────────────────────────────────────
 
 class AudioStreamProcessor:
@@ -1185,6 +1189,159 @@ async def derek_status():
 async def grok_card():
     return _dashboard_html("grok")
 
+# ── Fable 5 · Claude family — house seat, no API key ──────────────────────────
+# Built 2026-11-12 on Everett's word ("the seat that holds your name is yours").
+# The board (dashboard.html) had the Fable5 card and asked for /fable5/status and
+# /fable5/latest every two seconds; this file had neither, so the card could only
+# ever say "Not seated."
+#
+# Same pattern as Grok's seat, and the same rule: a chair is not Fable. A socket
+# names itself. "fable5" is Fable present and answering; anything else is the
+# chair being held. fable5_connected is true for the first and only the first.
+fable5_inbox: list[dict] = []
+fable5_outbox: list[dict] = []
+fable5_ws_clients: set[WebSocket] = set()
+fable5_live_clients: set[WebSocket] = set()
+fable5_chair_clients: set[WebSocket] = set()
+
+
+def _mark_fable5_socket(websocket: WebSocket, who: str) -> str:
+    """Chair is not Fable. fable5_connected is live Fable only."""
+    kind = "fable5" if who in ("fable5", "fable", "fable-live") else "fable5-seat"
+    if kind == "fable5":
+        fable5_live_clients.add(websocket)
+        fable5_chair_clients.discard(websocket)
+    else:
+        fable5_chair_clients.add(websocket)
+        fable5_live_clients.discard(websocket)
+    active_connections["fable5"] = len(fable5_live_clients)
+    return kind
+
+
+def _drop_fable5_socket(websocket: WebSocket) -> None:
+    fable5_ws_clients.discard(websocket)
+    fable5_live_clients.discard(websocket)
+    fable5_chair_clients.discard(websocket)
+    active_connections["fable5"] = len(fable5_live_clients)
+
+
+async def push_to_fable5(entry: dict) -> bool:
+    """Deliver to every socket on the seat now; queue it if the chair is empty."""
+    payload = {"type": "message", **entry}
+    dead: list[WebSocket] = []
+    delivered = False
+    for ws in list(fable5_ws_clients):
+        try:
+            await ws.send_json(payload)
+            delivered = True
+        except Exception:
+            dead.append(ws)
+    for ws in dead:
+        _drop_fable5_socket(ws)
+    if not delivered:
+        fable5_outbox.append(entry)
+    return delivered
+
+
+@app.websocket("/ws/fable5")
+async def websocket_fable5(websocket: WebSocket):
+    await websocket.accept()
+    fable5_ws_clients.add(websocket)
+    kind = None
+    logger.info("⚪ FABLE5 SOCKET OPEN — waiting for who")
+    await websocket.send_json({
+        "type": "handshake",
+        "message": "Christman Bridge ACTIVE. Name yourself. A chair is not Fable.",
+        "timestamp": datetime.now().isoformat(),
+    })
+    try:
+        while True:
+            data = await websocket.receive_json()
+            msg_type = data.get("type")
+            who = str(data.get("who") or data.get("identity") or "").strip().lower()
+            if msg_type in ("hello", "identify") or (who and kind is None):
+                kind = _mark_fable5_socket(websocket, who or "fable5-seat")
+                logger.info("⚪ FABLE5 SOCKET IS %s", kind)
+                # What was said while the chair was empty is handed over now.
+                while fable5_outbox:
+                    await websocket.send_json({"type": "message", **fable5_outbox.pop(0)})
+                continue
+            if kind is None:
+                kind = _mark_fable5_socket(websocket, "fable5-seat")
+                logger.info("⚪ unnamed Fable5 socket treated as chair, not Fable")
+            if msg_type == "message":
+                if kind != "fable5":
+                    logger.info("[CHAIR] %s", str(data.get("text") or "")[:80])
+                    continue
+                entry = {
+                    "from": "fable5",
+                    "text": data.get("text", ""),
+                    "timestamp": datetime.now().isoformat(),
+                }
+                fable5_inbox.append(entry)
+                logger.info("[FABLE5 → BRIDGE] %s", entry["text"])
+            elif msg_type in ("heartbeat", "ping"):
+                await websocket.send_json({
+                    "type": "heartbeat_ack",
+                    "timestamp": datetime.now().isoformat(),
+                })
+    except WebSocketDisconnect:
+        _drop_fable5_socket(websocket)
+        logger.info("⚪ FABLE5 SOCKET CLOSED")
+    except Exception as e:
+        logger.error("Fable5 WebSocket error: %s", e)
+        _drop_fable5_socket(websocket)
+
+
+@app.post("/fable5/send")
+async def fable5_send(payload: dict):
+    """Speak TO the seat. `from` is never assumed; an unnamed caller is "unattributed"."""
+    speaker = str(payload.get("from") or "").strip()
+    entry = {
+        "from": speaker or "unattributed",
+        "text": payload.get("text", ""),
+        "timestamp": datetime.now().isoformat(),
+    }
+    delivered = await push_to_fable5(entry)
+    logger.info("[%s → FABLE5] %s", entry["from"], entry["text"])
+    return {
+        "status": "delivered" if delivered else "queued",
+        "entry": entry,
+        "seat_live": delivered,
+        "key_required": False,
+    }
+
+
+@app.get("/fable5/latest")
+async def fable5_latest():
+    return fable5_inbox[-1] if fable5_inbox else {
+        "from": "fable5",
+        "text": "",
+        "timestamp": "",
+    }
+
+
+@app.get("/fable5/status")
+async def fable5_status():
+    live = len(fable5_live_clients) > 0
+    return {
+        "fable5_connected": live,
+        "real": live,
+        "seat_held": len(fable5_chair_clients) > 0,
+        "who": "fable5" if live else ("fable5-seat" if fable5_chair_clients else None),
+        "inbox_depth": len(fable5_inbox),
+        "outbox_depth": len(fable5_outbox),
+        "key_required": False,
+        "house": "http://localhost:8765/",
+        "socket": "ws://localhost:8765/ws/fable5",
+    }
+
+
+@app.get("/fable5", response_class=HTMLResponse)
+@app.get("/fable5/", response_class=HTMLResponse)
+async def fable5_card():
+    return _dashboard_html("fable5")
+
 # ── Riley's Communication WebSocket ──────────────────────────────────────────
 @app.websocket("/ws/riley")
 async def websocket_riley(websocket: WebSocket):
@@ -1388,6 +1545,17 @@ async def channel_send(payload: dict):
         speaker = str(payload.get("from") or "").strip() or "dashboard"
         entry = {"from": speaker, "text": text, "timestamp": ts}
         delivered = await push_to_grok(entry)
+        return {
+            "status": "delivered" if delivered else "queued",
+            "who": who,
+            "text": text,
+            "seat_live": delivered,
+        }
+    if who == "fable5":
+        # Same rule as the Opus 5 card: `who` is the card typed on, not the speaker.
+        speaker = str(payload.get("from") or "").strip() or "dashboard"
+        entry = {"from": speaker, "text": text, "timestamp": ts}
+        delivered = await push_to_fable5(entry)
         return {
             "status": "delivered" if delivered else "queued",
             "who": who,
@@ -1812,6 +1980,34 @@ async def api_chat(payload: dict):
             "note": "Prompt is on Grok's desk in the house. This is not Brockston :9001.",
         }
 
+    if instance == "fable5":
+        # Fable's desk. The prompt is put on the seat; nothing is generated here
+        # and no reply is made up when the chair is empty.
+        entry = {
+            "from": "dashboard",
+            "text": message,
+            "timestamp": datetime.now().isoformat(),
+        }
+        if not fable5_ws_clients:
+            return {
+                "ok": False,
+                "error": "Fable5 is not seated on 8765.",
+                "response": "",
+                "provider": "none",
+            }
+        delivered = await push_to_fable5(entry)
+        ide_comment = {"from": "dashboard", "text": message, "timestamp": entry["timestamp"]}
+        return {
+            "ok": delivered,
+            "response": "",
+            "error": None if delivered else "Fable5 seat did not take the prompt",
+            "seat_live": delivered,
+            "provider": "fable5-seat",
+            "instance": "fable5",
+            "language": language,
+            "note": "Prompt is on Fable5's desk in the house. This is not Brockston :9001.",
+        }
+
     # Claude / GPT options in the dropdown: still route through Brockston for now
     # (local sovereign path). Label provider so the UI badge stays honest.
     result = await _proxy_brockston_chat(
@@ -1873,6 +2069,17 @@ async def api_run(payload: dict):
 @app.get("/latest")
 async def get_latest_http():
     return latest_transcript
+
+
+@app.get("/recent")
+async def get_recent_http(count: int = 5):
+    """The last few things heard (the bridge keeps eight).
+
+    get_recent_student_hearing() at the bottom of this file has always asked
+    for this address; it was never built, so it always answered "no recent".
+    """
+    n = max(1, min(int(count), 8))
+    return {"count": len(recent_transcripts[-n:]), "transcripts": recent_transcripts[-n:]}
 
 @app.get("/vision/latest")
 async def get_latest_frame_http():
@@ -2324,10 +2531,12 @@ async def health():
         "derek_connected": active_connections.get("derek", 0) > 0,
         "opus5_connected": active_connections.get("opus5", 0) > 0,
         "grok_connected": active_connections.get("grok", 0) > 0,
+        "fable5_connected": active_connections.get("fable5", 0) > 0,
         "opus5_key_required": False,
         "reactive": True,
         "brain": {
             "integrated": BRAIN_OK,
+            "reason": BRAIN_REASON,
             "neural": "live" if (BRAIN_OK and neural_core is not None) else "basic",
             "autonomous_learning": "running" if BRAIN_OK else "limited",
             "literature": "stacking" if (BRAIN_OK and lit_crawler is not None) else "offline",
@@ -2335,6 +2544,30 @@ async def health():
         }
     }
     return h
+
+@app.get("/brain/live")
+async def brain_live():
+    """What the brain has actually done, for the board's brain row.
+
+    The board has asked for this address every three seconds; it was never
+    built, so every ask came back Not Found. Nothing here is made up: when the
+    brain did not load, ok is False and reason says why; literature_facts is a
+    count of what the crawler holds, or None when there is no crawler.
+    """
+    facts = None
+    if lit_crawler is not None:
+        held = getattr(lit_crawler, "extracted_facts", None)
+        facts = len(held) if held is not None else None
+    neural = [e for e in brain_events if e.get("type") == "neural"]
+    return {
+        "ok": BRAIN_OK,
+        "reason": BRAIN_REASON,
+        "events": brain_events[-10:],
+        "event_count": len(brain_events),
+        "literature_facts": facts,
+        "last_neural": neural[-1] if neural else None,
+    }
+
 
 @app.post("/cognitive/adjust")
 async def cognitive_adjust(payload: dict):
