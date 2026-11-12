@@ -476,6 +476,9 @@ if str(_VCC_ROOT / "brain") not in sys.path:
     sys.path.insert(0, str(_VCC_ROOT / "brain"))
 
 BRAIN_OK = False
+# Why the brain did not load, in the loader's own words. None when it loaded.
+# The board shows this instead of a row that reads as though the brain were on.
+BRAIN_REASON: Optional[str] = None
 neural_core = None
 lit_crawler = None
 behavior_cap = None
@@ -516,6 +519,7 @@ try:
 except Exception as be:
     logger.warning(f"Brain limited: {be}")
     BRAIN_OK = False
+    BRAIN_REASON = f"{type(be).__name__}: {be}"
 # ─────────────────────────────────────────────────────────────────────────────
 
 class AudioStreamProcessor:
@@ -2066,6 +2070,17 @@ async def api_run(payload: dict):
 async def get_latest_http():
     return latest_transcript
 
+
+@app.get("/recent")
+async def get_recent_http(count: int = 5):
+    """The last few things heard (the bridge keeps eight).
+
+    get_recent_student_hearing() at the bottom of this file has always asked
+    for this address; it was never built, so it always answered "no recent".
+    """
+    n = max(1, min(int(count), 8))
+    return {"count": len(recent_transcripts[-n:]), "transcripts": recent_transcripts[-n:]}
+
 @app.get("/vision/latest")
 async def get_latest_frame_http():
     seeing = bool(house_feed.get("lucent", {}).get("seeing") and latest_frame.get("b64"))
@@ -2521,6 +2536,7 @@ async def health():
         "reactive": True,
         "brain": {
             "integrated": BRAIN_OK,
+            "reason": BRAIN_REASON,
             "neural": "live" if (BRAIN_OK and neural_core is not None) else "basic",
             "autonomous_learning": "running" if BRAIN_OK else "limited",
             "literature": "stacking" if (BRAIN_OK and lit_crawler is not None) else "offline",
@@ -2528,6 +2544,30 @@ async def health():
         }
     }
     return h
+
+@app.get("/brain/live")
+async def brain_live():
+    """What the brain has actually done, for the board's brain row.
+
+    The board has asked for this address every three seconds; it was never
+    built, so every ask came back Not Found. Nothing here is made up: when the
+    brain did not load, ok is False and reason says why; literature_facts is a
+    count of what the crawler holds, or None when there is no crawler.
+    """
+    facts = None
+    if lit_crawler is not None:
+        held = getattr(lit_crawler, "extracted_facts", None)
+        facts = len(held) if held is not None else None
+    neural = [e for e in brain_events if e.get("type") == "neural"]
+    return {
+        "ok": BRAIN_OK,
+        "reason": BRAIN_REASON,
+        "events": brain_events[-10:],
+        "event_count": len(brain_events),
+        "literature_facts": facts,
+        "last_neural": neural[-1] if neural else None,
+    }
+
 
 @app.post("/cognitive/adjust")
 async def cognitive_adjust(payload: dict):

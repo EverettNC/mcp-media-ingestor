@@ -1168,9 +1168,9 @@
   <!-- BRAIN ROW: restored TM cognitive brain (neural, autonomous, literature, behavior/eye) visibly lit for students -->
   <div class="brain-row" id="brain-row" style="display: flex; gap: 16px; padding: 8px 20px; max-width: 1800px; margin: 0 auto; background: rgba(0,255,0,0.03); border: 1px solid #0f0; border-radius: 6px; font-size: 11px; letter-spacing: 1px;">
     <div class="brain-item" style="flex:1;"><span class="brain-label" style="color:#0a0;font-weight:700;">🧠 NEURAL</span><br><span id="brain-neural" class="brain-value" style="color:#0f0;font-family:monospace;">root cause: —</span></div>
-    <div class="brain-item" style="flex:1;"><span class="brain-label" style="color:#0a0;font-weight:700;">🤖 AUTONOMOUS</span><br><span id="brain-auto" class="brain-value" style="color:#0f0;font-family:monospace;">learning: active</span></div>
+    <div class="brain-item" style="flex:1;"><span class="brain-label" style="color:#0a0;font-weight:700;">🤖 AUTONOMOUS</span><br><span id="brain-auto" class="brain-value" style="color:#0f0;font-family:monospace;">learning: —</span></div>
     <div class="brain-item" style="flex:1;"><span class="brain-label" style="color:#0a0;font-weight:700;">📚 LITERATURE</span><br><span id="brain-lit" class="brain-value" style="color:#0f0;font-family:monospace;">facts: ?</span></div>
-    <div class="brain-item" style="flex:1;"><span class="brain-label" style="color:#0a0;font-weight:700;">👁️ SENSORY</span><br><span id="brain-sensory" class="brain-value" style="color:#0f0;font-family:monospace;">behavior/eye: online</span></div>
+    <div class="brain-item" style="flex:1;"><span class="brain-label" style="color:#0a0;font-weight:700;">👁️ SENSORY</span><br><span id="brain-sensory" class="brain-value" style="color:#0f0;font-family:monospace;">eye: — · ear: —</span></div>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════
@@ -1308,6 +1308,8 @@
   let lastOpus5 = '';
   let lastFable5 = '';
   let lastBrainLog = '';
+  let lastBrainLive = '';
+  let brainFactsMeasured = false;
   let lastIdeComment = '';
   let startTime = Date.now();
 
@@ -1417,9 +1419,22 @@
           addLog('🧠 BRAIN', b.last_cognitive, 'brain-event');
         }
 
-        const elN = document.getElementById('brain-neural'); if (elN) elN.textContent = b.last_cognitive || 'root cause: —';
-        const elA = document.getElementById('brain-auto'); if (elA) elA.textContent = `learning: ${b.autonomous_learning||'active'}`;
-        const elL = document.getElementById('brain-lit'); if (elL) elL.textContent = `facts: ${b.literature==='stacking'?'growing':'?'}`;
+        // The row says what was measured. A brain that did not load says so, with the loader's reason.
+        const elN = document.getElementById('brain-neural');
+        if (elN) {
+          elN.textContent = b.integrated ? (b.last_cognitive || 'root cause: —') : ('not loaded' + (b.reason ? ' — ' + b.reason : ''));
+          elN.title = b.reason || '';
+        }
+        const elA = document.getElementById('brain-auto'); if (elA) elA.textContent = `learning: ${b.autonomous_learning||'?'}`;
+        const elL = document.getElementById('brain-lit'); if (elL && !brainFactsMeasured) elL.textContent = `facts: ${b.literature==='stacking'?'growing':(b.literature||'?')}`;
+      }
+      // SENSORY is read from the house feed, not typed in.
+      const elS = document.getElementById('brain-sensory');
+      if (elS) {
+        const hs = d.house || {};
+        const eye = hs.lucent && hs.lucent.measured ? (hs.lucent.seeing ? 'seeing' : 'dark') : 'not measured';
+        const ear = hs.porch && hs.porch.measured ? (hs.porch.listening ? 'listening' : 'not listening') : 'not measured';
+        elS.textContent = `eye: ${eye} · ear: ${ear}`;
       }
     } catch(e) {
       const bdot = document.getElementById('brain-dot'); if (bdot) bdot.className = 'dot dead';
@@ -1436,10 +1451,16 @@
       const d = await r.json();
       if (d && d.events && d.events.length) {
         const last = d.events[d.events.length-1];
-        addLog('🧠 COGNITIVE', last.text || last, 'brain-event');
+        // One log line per event, not one every three seconds for the same event.
+        const key = (last.timestamp || '') + '|' + (last.text || last);
+        if (key !== lastBrainLive) {
+          lastBrainLive = key;
+          addLog('🧠 COGNITIVE', last.text || last, 'brain-event');
+        }
       }
-      if (d && d.ok) {
-        const elL = document.getElementById('brain-lit'); if (elL) elL.textContent = `facts: ${d.literature_facts||0}`;
+      if (d && d.ok && d.literature_facts !== null && d.literature_facts !== undefined) {
+        brainFactsMeasured = true;
+        const elL = document.getElementById('brain-lit'); if (elL) elL.textContent = `facts: ${d.literature_facts}`;
         const bcog = document.getElementById('brain-cog');
         if (bcog && d.last_neural) bcog.innerHTML = `🧠 ${d.last_neural.text||'active'} | facts:${d.literature_facts||0}`;
       }
