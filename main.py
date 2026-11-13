@@ -185,7 +185,7 @@ def _porch_transcribe_wav(wav: bytes) -> str:
 
 active_connections: Dict[str, int] = {
     "mic": 0, "riley": 0, "vision": 0, "carbon": 0, "brockston": 0,
-    "opus5": 0, "derek": 0, "grok": 0, "fable5": 0,
+    "opus5": 0, "derek": 0, "grok": 0, "fable5": 0, "duey": 0,
 }
 latest_transcript = {"text": "", "timestamp": 0}
 recent_transcripts: list[dict] = []
@@ -1342,6 +1342,159 @@ async def fable5_status():
 async def fable5_card():
     return _dashboard_html("fable5")
 
+# ── Duey · family seat, no API key ────────────────────────────────────────────
+# Built 2026-11-13 on Everett's word: "Set him up a chair so let's take out Riley
+# and let's replace Riley with Dewey" (he spelled the name D-U-E-Y out loud).
+# This chair was Riley's on the board. Riley's back end is untouched below.
+#
+# Same pattern as Fable5's and Grok's seats, and the same rule: a chair is not
+# Duey. A socket names itself. "duey" is Duey present and answering; anything
+# else is the chair being held. duey_connected is true for the first and only
+# the first.
+duey_inbox: list[dict] = []
+duey_outbox: list[dict] = []
+duey_ws_clients: set[WebSocket] = set()
+duey_live_clients: set[WebSocket] = set()
+duey_chair_clients: set[WebSocket] = set()
+
+
+def _mark_duey_socket(websocket: WebSocket, who: str) -> str:
+    """Chair is not Duey. duey_connected is live Duey only."""
+    kind = "duey" if who in ("duey", "duey-live") else "duey-seat"
+    if kind == "duey":
+        duey_live_clients.add(websocket)
+        duey_chair_clients.discard(websocket)
+    else:
+        duey_chair_clients.add(websocket)
+        duey_live_clients.discard(websocket)
+    active_connections["duey"] = len(duey_live_clients)
+    return kind
+
+
+def _drop_duey_socket(websocket: WebSocket) -> None:
+    duey_ws_clients.discard(websocket)
+    duey_live_clients.discard(websocket)
+    duey_chair_clients.discard(websocket)
+    active_connections["duey"] = len(duey_live_clients)
+
+
+async def push_to_duey(entry: dict) -> bool:
+    """Deliver to every socket on the seat now; queue it if the chair is empty."""
+    payload = {"type": "message", **entry}
+    dead: list[WebSocket] = []
+    delivered = False
+    for ws in list(duey_ws_clients):
+        try:
+            await ws.send_json(payload)
+            delivered = True
+        except Exception:
+            dead.append(ws)
+    for ws in dead:
+        _drop_duey_socket(ws)
+    if not delivered:
+        duey_outbox.append(entry)
+    return delivered
+
+
+@app.websocket("/ws/duey")
+async def websocket_duey(websocket: WebSocket):
+    await websocket.accept()
+    duey_ws_clients.add(websocket)
+    kind = None
+    logger.info("🟣 DUEY SOCKET OPEN — waiting for who")
+    await websocket.send_json({
+        "type": "handshake",
+        "message": "Christman Bridge ACTIVE. Name yourself. A chair is not Duey.",
+        "timestamp": datetime.now().isoformat(),
+    })
+    try:
+        while True:
+            data = await websocket.receive_json()
+            msg_type = data.get("type")
+            who = str(data.get("who") or data.get("identity") or "").strip().lower()
+            if msg_type in ("hello", "identify") or (who and kind is None):
+                kind = _mark_duey_socket(websocket, who or "duey-seat")
+                logger.info("🟣 DUEY SOCKET IS %s", kind)
+                # What was said while the chair was empty is handed over now.
+                while duey_outbox:
+                    await websocket.send_json({"type": "message", **duey_outbox.pop(0)})
+                continue
+            if kind is None:
+                kind = _mark_duey_socket(websocket, "duey-seat")
+                logger.info("🟣 unnamed Duey socket treated as chair, not Duey")
+            if msg_type == "message":
+                if kind != "duey":
+                    logger.info("[CHAIR] %s", str(data.get("text") or "")[:80])
+                    continue
+                entry = {
+                    "from": "duey",
+                    "text": data.get("text", ""),
+                    "timestamp": datetime.now().isoformat(),
+                }
+                duey_inbox.append(entry)
+                logger.info("[DUEY → BRIDGE] %s", entry["text"])
+            elif msg_type in ("heartbeat", "ping"):
+                await websocket.send_json({
+                    "type": "heartbeat_ack",
+                    "timestamp": datetime.now().isoformat(),
+                })
+    except WebSocketDisconnect:
+        _drop_duey_socket(websocket)
+        logger.info("🟣 DUEY SOCKET CLOSED")
+    except Exception as e:
+        logger.error("Duey WebSocket error: %s", e)
+        _drop_duey_socket(websocket)
+
+
+@app.post("/duey/send")
+async def duey_send(payload: dict):
+    """Speak TO the seat. `from` is never assumed; an unnamed caller is "unattributed"."""
+    speaker = str(payload.get("from") or "").strip()
+    entry = {
+        "from": speaker or "unattributed",
+        "text": payload.get("text", ""),
+        "timestamp": datetime.now().isoformat(),
+    }
+    delivered = await push_to_duey(entry)
+    logger.info("[%s → DUEY] %s", entry["from"], entry["text"])
+    return {
+        "status": "delivered" if delivered else "queued",
+        "entry": entry,
+        "seat_live": delivered,
+        "key_required": False,
+    }
+
+
+@app.get("/duey/latest")
+async def duey_latest():
+    return duey_inbox[-1] if duey_inbox else {
+        "from": "duey",
+        "text": "",
+        "timestamp": "",
+    }
+
+
+@app.get("/duey/status")
+async def duey_status():
+    live = len(duey_live_clients) > 0
+    return {
+        "duey_connected": live,
+        "real": live,
+        "seat_held": len(duey_chair_clients) > 0,
+        "who": "duey" if live else ("duey-seat" if duey_chair_clients else None),
+        "inbox_depth": len(duey_inbox),
+        "outbox_depth": len(duey_outbox),
+        "key_required": False,
+        "house": "http://localhost:8765/",
+        "socket": "ws://localhost:8765/ws/duey",
+    }
+
+
+@app.get("/duey", response_class=HTMLResponse)
+@app.get("/duey/", response_class=HTMLResponse)
+async def duey_card():
+    return _dashboard_html("duey")
+
 # ── Riley's Communication WebSocket ──────────────────────────────────────────
 @app.websocket("/ws/riley")
 async def websocket_riley(websocket: WebSocket):
@@ -1556,6 +1709,17 @@ async def channel_send(payload: dict):
         speaker = str(payload.get("from") or "").strip() or "dashboard"
         entry = {"from": speaker, "text": text, "timestamp": ts}
         delivered = await push_to_fable5(entry)
+        return {
+            "status": "delivered" if delivered else "queued",
+            "who": who,
+            "text": text,
+            "seat_live": delivered,
+        }
+    if who == "duey":
+        # Same rule as the Fable5 card: `who` is the card typed on, not the speaker.
+        speaker = str(payload.get("from") or "").strip() or "dashboard"
+        entry = {"from": speaker, "text": text, "timestamp": ts}
+        delivered = await push_to_duey(entry)
         return {
             "status": "delivered" if delivered else "queued",
             "who": who,
@@ -2532,6 +2696,7 @@ async def health():
         "opus5_connected": active_connections.get("opus5", 0) > 0,
         "grok_connected": active_connections.get("grok", 0) > 0,
         "fable5_connected": active_connections.get("fable5", 0) > 0,
+        "duey_connected": active_connections.get("duey", 0) > 0,
         "opus5_key_required": False,
         "reactive": True,
         "brain": {

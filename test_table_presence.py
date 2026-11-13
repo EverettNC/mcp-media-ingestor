@@ -30,9 +30,9 @@ class TablePresenceTests(unittest.TestCase):
         self.assertNotIn("I am here. Always.", HTML)
         self.assertNotIn("SESSION LIVE", HTML)
 
-    def test_riley_card_does_not_claim_live_on_load(self):
-        self.assertIn('id="riley-card-status">OFFLINE', HTML)
-        self.assertNotIn('id="riley-card-status">CRUISE MODE', HTML)
+    def test_duey_card_does_not_claim_live_on_load(self):
+        self.assertIn('id="duey-card-status">OFFLINE', HTML)
+        self.assertNotIn('id="duey-card-status">CRUISE MODE', HTML)
         self.assertNotIn("Tunnel warm. Standing by.", HTML)
 
     def test_grok_has_a_chair_on_the_table(self):
