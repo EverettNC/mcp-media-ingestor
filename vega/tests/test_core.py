@@ -18,7 +18,6 @@ def bridge_queues():
         "riley_inbox":   [],
         "claude_outbox": [],
         "everest_outbox": [],
-        "learner_inbox":  [],
     }
 
 @pytest.fixture
@@ -51,7 +50,6 @@ class TestBroadcast:
         assert len(bridge_queues["riley_inbox"]) >= 1
         assert len(bridge_queues["claude_outbox"]) >= 1
         assert len(bridge_queues["everest_outbox"]) >= 1
-        assert len(bridge_queues["learner_inbox"]) >= 1
 
     def test_broadcast_returns_dict(self, core):
         result = core.broadcast_to_bridge("Hello bridge")
@@ -63,8 +61,7 @@ class TestBroadcast:
             e.get("text", "") for e in
             bridge_queues["riley_inbox"] +
             bridge_queues["claude_outbox"] +
-            bridge_queues["everest_outbox"] +
-            bridge_queues["learner_inbox"]
+            bridge_queues["everest_outbox"]
         ]
         assert any("UNIQUE_TEST_MESSAGE_XYZ" in t for t in all_texts)
 
@@ -91,8 +88,7 @@ class TestVideoPromptHandling:
         all_entries = (
             bridge_queues["riley_inbox"] +
             bridge_queues["claude_outbox"] +
-            bridge_queues["everest_outbox"] +
-            bridge_queues["learner_inbox"]
+            bridge_queues["everest_outbox"]
         )
         assert len(all_entries) > 0
 
@@ -112,8 +108,7 @@ class TestImagePromptHandling:
         all_entries = (
             bridge_queues["riley_inbox"] +
             bridge_queues["claude_outbox"] +
-            bridge_queues["everest_outbox"] +
-            bridge_queues["learner_inbox"]
+            bridge_queues["everest_outbox"]
         )
         assert len(all_entries) > 0
 

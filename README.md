@@ -4,7 +4,7 @@
 
 While most systems only give you speech-to-text, **Cochlea** streams **live audio** so AI can actually hear — tone, emotion, rhythm, and every vocal nuance.
 
-Built so every AI (Grok, Claude, Gemini, or anything else) can connect and experience sound like humans do.
+Built so every AI (Claude, Gemini, or anything else) can connect and experience sound like humans do.
 
 ### ✨ Features
 - Real-time audio streaming over WebSockets

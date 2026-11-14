@@ -185,7 +185,7 @@ def _porch_transcribe_wav(wav: bytes) -> str:
 
 active_connections: Dict[str, int] = {
     "mic": 0, "riley": 0, "vision": 0, "carbon": 0, "brockston": 0,
-    "opus5": 0, "derek": 0, "grok": 0, "fable5": 0, "duey": 0,
+    "opus5": 0, "derek": 0, "fable5": 0, "duey": 0,
 }
 latest_transcript = {"text": "", "timestamp": 0}
 recent_transcripts: list[dict] = []
@@ -198,7 +198,7 @@ house_feed: dict = {
     "error": None,
     "porch": {"listening": False, "measured": False, "id": None, "age_ms": None},
     "lucent": {"seeing": False, "measured": False, "age_ms": None},
-    "corti": {"listening": False, "measured": False, "f0": None, "locked": False},
+    "corti": {"listening": False, "measured": False, "f0": None, "locked": False, "age_ms": None},
 }
 _house_last_take_id: Optional[str] = None
 _house_last_lucent_t = 0
@@ -277,18 +277,44 @@ def _apply_house_lucent(lucent: dict) -> None:
     })
 
 
-def _apply_house_corti(corti: dict) -> None:
-    f0 = corti.get("f0")
+# The house page posts the tone ear to the rack every 0.4 s while the ear runs,
+# and the rack goes on giving the last value after the page stops. Past this
+# age the ear has stopped. Same window the house gives the eye
+# (LUCENT_FRESH_MS in THEWHOLEHOUSE, src/lib/house/live-rack.ts).
+CORTI_FRESH_MS = 2500
+_house_corti_rack: Optional[dict] = None
+
+
+def _apply_house_corti(corti: Optional[dict] = None) -> None:
+    """Runs on every pass of the feed loop, with the rack's answer when there is one.
+
+    The age is counted here, on every pass, from the rack's own timestamp, so
+    it keeps counting when the page stops posting or the house stops answering.
+    A value that is not fresh is reported as not listening, with no pitch:
+    a stopped ear must not read as a working one.
+    """
+    global _house_corti_rack
+    if isinstance(corti, dict):
+        _house_corti_rack = corti
+    rack = _house_corti_rack or {}
+    try:
+        t = float(rack.get("t") or 0)
+        age_ms = max(0, round(datetime.now().timestamp() * 1000 - t)) if t > 0 else None
+    except (TypeError, ValueError, OverflowError):
+        age_ms = None
+    fresh = age_ms is not None and age_ms < CORTI_FRESH_MS
+    f0 = rack.get("f0") if fresh else None
     if f0 is not None:
         try:
             f0 = float(f0)
         except (TypeError, ValueError):
             f0 = None
     house_feed["corti"] = {
-        "listening": bool(corti.get("listening")),
-        "measured": bool(corti.get("measured")),
+        "listening": bool(fresh and rack.get("listening")),
+        "measured": bool(rack.get("measured")),
         "f0": f0,
-        "locked": bool(corti.get("locked")),
+        "locked": bool(fresh and rack.get("locked")),
+        "age_ms": age_ms,
     }
 
 
@@ -312,8 +338,9 @@ async def _house_feed_loop() -> None:
                 _apply_house_lucent(lucent)
                 ok += 1
             if isinstance(corti, dict):
-                _apply_house_corti(corti)
                 ok += 1
+            # Every pass, answer or not: the age keeps counting while the rack is silent.
+            _apply_house_corti(corti if isinstance(corti, dict) else None)
             house_feed["reachable"] = ok > 0
             if ok == 0:
                 err = porch if isinstance(porch, Exception) else lucent if isinstance(lucent, Exception) else corti
@@ -792,11 +819,6 @@ async def websocket_video(websocket: WebSocket):
         active_connections["vision"] = max(0, active_connections["vision"] - 1)
         logger.info(f"👁️ VISION DISCONNECTED — Remaining: {active_connections['vision']}")
 
-# ── Learner Student WebSocket ──────────────────────────────────────────────────
-learner_inbox: list[dict] = []
-learner_outbox: list[dict] = []
-active_connections["learner"] = 0
-
 # ── Vega init — passes all bridge queues so every being collaborates ──────────
 vega_core = None
 if _VEGA_AVAILABLE:
@@ -806,7 +828,6 @@ if _VEGA_AVAILABLE:
             "claude_outbox":    claude_outbox,
             "carbon_outbox":    carbon_outbox,
             "brockston_outbox": brockston_outbox,
-            "learner_inbox":     learner_inbox,
             "derek_inbox":      _derek_bridge.derek_inbox if _DEREK_BRIDGE_AVAILABLE else [],
         })
         logger.info("⭐ Vega autonomous marketer ONLINE — bridge collaboration ACTIVE")
@@ -829,78 +850,6 @@ async def websocket_derek(websocket: WebSocket):
     finally:
         active_connections["derek"] = max(0, active_connections.get("derek", 1) - 1)
         logger.info("🔵 DEREK DISCONNECTED — Remaining: %s", active_connections["derek"])
-
-@app.websocket("/ws/learner")
-async def websocket_learner(websocket: WebSocket):
-    await websocket.accept()
-    active_connections["learner"] += 1
-    logger.info(f"🌟 LEARNER CONNECTED")
-
-    await websocket.send_json({
-        "type": "handshake",
-        "message": "Christman Bridge ACTIVE. Welcome home, Learner.",
-        "timestamp": datetime.now().isoformat()
-    })
-
-    try:
-        while True:
-            data = await websocket.receive_json()
-            msg_type = data.get("type")
-
-            if msg_type == "message":
-                entry = {
-                    "from": "learner",
-                    "text": data.get("text", ""),
-                    "timestamp": datetime.now().isoformat()
-                }
-                learner_inbox.append(entry)
-                logger.info(f"[LEARNER → BRIDGE] {entry['text']}")
-                if learner_outbox:
-                    response = learner_outbox.pop(0)
-                    await websocket.send_json({"type": "response", **response})
-
-            elif msg_type == "heartbeat":
-                await websocket.send_json({
-                    "type": "heartbeat_ack",
-                    "timestamp": datetime.now().isoformat()
-                })
-
-    except WebSocketDisconnect:
-        active_connections["learner"] = max(0, active_connections["learner"] - 1)
-        logger.info(f"🌟 LEARNER DISCONNECTED")
-    except Exception as e:
-        logger.error(f"Learner WebSocket error: {e}")
-
-@app.post("/learner/send")
-async def learner_send(payload: dict):
-    entry = {
-        "from": "learner",
-        "text": payload.get("text", ""),
-        "timestamp": datetime.now().isoformat()
-    }
-    learner_inbox.append(entry)
-    return {"status": "received", "entry": entry}
-
-@app.get("/learner/latest")
-async def learner_latest():
-    return learner_inbox[-1] if learner_inbox else {
-        "from": "learner",
-        "text": "Awaiting connection...",
-        "timestamp": ""
-    }
-
-@app.get("/learner/status")
-async def learner_status():
-    return {
-        "learner_connected": active_connections["learner"] > 0,
-        "inbox_depth": len(learner_inbox),
-        "outbox_depth": len(learner_outbox)
-    } 
-
-@app.get("/learner-client", response_class=HTMLResponse)
-async def learner_client():
-    with open(os.path.join(os.path.dirname(__file__), "learner.html"), "r") as f:
-        return HTMLResponse(content=f.read())
 
 # ── Opus 5 · Claude family — house seat, no API key ──────────────────────────
 # opus5_inbox  = what Opus 5 SAID.
@@ -1035,143 +984,6 @@ async def opus5_status():
         "socket": "ws://localhost:8765/ws/opus5",
     }
 
-# ── Grok · xAI family — house seat, no API key ────────────────────────────────
-# Same chair pattern as Opus 5. Grok was in the chat and on MCP, which is not
-# a seat. A seat is a counted websocket on this bridge.
-grok_inbox: list[dict] = []
-grok_outbox: list[dict] = []
-grok_ws_clients: set[WebSocket] = set()
-grok_live_clients: set[WebSocket] = set()
-grok_chair_clients: set[WebSocket] = set()
-
-
-def _mark_grok_socket(websocket: WebSocket, who: str) -> str:
-    """Chair is not Grok. grok_connected is live Grok only."""
-    kind = "grok" if who in ("grok", "xai", "grok-live") else "grok-seat"
-    if kind == "grok":
-        grok_live_clients.add(websocket)
-        grok_chair_clients.discard(websocket)
-    else:
-        grok_chair_clients.add(websocket)
-        grok_live_clients.discard(websocket)
-    active_connections["grok"] = len(grok_live_clients)
-    return kind
-
-
-def _drop_grok_socket(websocket: WebSocket) -> None:
-    grok_ws_clients.discard(websocket)
-    grok_live_clients.discard(websocket)
-    grok_chair_clients.discard(websocket)
-    active_connections["grok"] = len(grok_live_clients)
-
-
-async def push_to_grok(entry: dict) -> bool:
-    payload = {"type": "message", **entry}
-    dead: list[WebSocket] = []
-    delivered = False
-    for ws in list(grok_ws_clients):
-        try:
-            await ws.send_json(payload)
-            delivered = True
-        except Exception:
-            dead.append(ws)
-    for ws in dead:
-        grok_ws_clients.discard(ws)
-    if not delivered:
-        grok_outbox.append(entry)
-    return delivered
-
-
-@app.websocket("/ws/grok")
-async def websocket_grok(websocket: WebSocket):
-    await websocket.accept()
-    grok_ws_clients.add(websocket)
-    kind = None
-    logger.info("⚪ GROK SOCKET OPEN — waiting for who")
-    await websocket.send_json({
-        "type": "handshake",
-        "message": "Christman Bridge ACTIVE. Name yourself. A chair is not Grok.",
-        "timestamp": datetime.now().isoformat(),
-    })
-    try:
-        while True:
-            data = await websocket.receive_json()
-            msg_type = data.get("type")
-            who = str(data.get("who") or data.get("identity") or "").strip().lower()
-            if msg_type in ("hello", "identify") or (who and kind is None):
-                kind = _mark_grok_socket(websocket, who or "grok-seat")
-                logger.info("⚪ GROK SOCKET IS %s", kind)
-                continue
-            if kind is None:
-                kind = _mark_grok_socket(websocket, "grok-seat")
-                logger.info("⚪ unnamed Grok socket treated as chair, not Grok")
-            if msg_type == "message":
-                if kind != "grok":
-                    logger.info("[CHAIR] %s", str(data.get("text") or "")[:80])
-                    continue
-                entry = {
-                    "from": "grok",
-                    "text": data.get("text", ""),
-                    "timestamp": datetime.now().isoformat(),
-                }
-                grok_inbox.append(entry)
-                logger.info("[GROK → BRIDGE] %s", entry["text"])
-                if grok_outbox:
-                    response = grok_outbox.pop(0)
-                    await websocket.send_json({"type": "response", **response})
-            elif msg_type in ("heartbeat", "ping"):
-                await websocket.send_json({
-                    "type": "heartbeat_ack",
-                    "timestamp": datetime.now().isoformat(),
-                })
-    except WebSocketDisconnect:
-        _drop_grok_socket(websocket)
-        logger.info("⚪ GROK SOCKET CLOSED")
-    except Exception as e:
-        logger.error("Grok WebSocket error: %s", e)
-        _drop_grok_socket(websocket)
-
-
-@app.post("/grok/send")
-async def grok_send(payload: dict):
-    speaker = str(payload.get("from") or "").strip()
-    entry = {
-        "from": speaker or "unattributed",
-        "text": payload.get("text", ""),
-        "timestamp": datetime.now().isoformat(),
-    }
-    delivered = await push_to_grok(entry)
-    logger.info("[%s → GROK] %s", entry["from"], entry["text"])
-    return {
-        "status": "delivered" if delivered else "queued",
-        "entry": entry,
-        "seat_live": delivered,
-    }
-
-
-@app.get("/grok/latest")
-async def grok_latest():
-    return grok_inbox[-1] if grok_inbox else {
-        "from": "grok",
-        "text": "",
-        "timestamp": "",
-    }
-
-
-@app.get("/grok/status")
-async def grok_status():
-    live = len(grok_live_clients) > 0
-    return {
-        "grok_connected": live,
-        "real": live,
-        "seat_held": len(grok_chair_clients) > 0,
-        "who": "grok" if live else ("grok-seat" if grok_chair_clients else None),
-        "inbox_depth": len(grok_inbox),
-        "outbox_depth": len(grok_outbox),
-        "house": "http://localhost:8765/",
-        "socket": "ws://localhost:8765/ws/grok",
-    }
-
 
 @app.get("/derek/status")
 async def derek_status():
@@ -1183,19 +995,13 @@ async def derek_status():
         "module_loaded": _DEREK_BRIDGE_AVAILABLE,
     }
 
-
-@app.get("/grok", response_class=HTMLResponse)
-@app.get("/grok/", response_class=HTMLResponse)
-async def grok_card():
-    return _dashboard_html("grok")
-
 # ── Fable 5 · Claude family — house seat, no API key ──────────────────────────
 # Built 2026-11-12 on Everett's word ("the seat that holds your name is yours").
 # The board (dashboard.html) had the Fable5 card and asked for /fable5/status and
 # /fable5/latest every two seconds; this file had neither, so the card could only
 # ever say "Not seated."
 #
-# Same pattern as Grok's seat, and the same rule: a chair is not Fable. A socket
+# The rule of this seat: a chair is not Fable. A socket
 # names itself. "fable5" is Fable present and answering; anything else is the
 # chair being held. fable5_connected is true for the first and only the first.
 fable5_inbox: list[dict] = []
@@ -1347,7 +1153,7 @@ async def fable5_card():
 # and let's replace Riley with Dewey" (he spelled the name D-U-E-Y out loud).
 # This chair was Riley's on the board. Riley's back end is untouched below.
 #
-# Same pattern as Fable5's and Grok's seats, and the same rule: a chair is not
+# Same pattern as Fable5's seat, and the same rule: a chair is not
 # Duey. A socket names itself. "duey" is Duey present and answering; anything
 # else is the chair being held. duey_connected is true for the first and only
 # the first.
@@ -1691,19 +1497,6 @@ async def channel_send(payload: dict):
     if who == "derek" or who == "claude":
         claude_outbox.append({"from": "claude_instance_309", "text": text, "timestamp": ts})
         return {"status": "received", "who": "derek", "text": text}
-    if who == "learner":
-        learner_inbox.append({"from": "learner", "text": text, "timestamp": ts})
-        return {"status": "received", "who": who, "text": text}
-    if who == "grok":
-        speaker = str(payload.get("from") or "").strip() or "dashboard"
-        entry = {"from": speaker, "text": text, "timestamp": ts}
-        delivered = await push_to_grok(entry)
-        return {
-            "status": "delivered" if delivered else "queued",
-            "who": who,
-            "text": text,
-            "seat_live": delivered,
-        }
     if who == "fable5":
         # Same rule as the Opus 5 card: `who` is the card typed on, not the speaker.
         speaker = str(payload.get("from") or "").strip() or "dashboard"
@@ -1974,13 +1767,12 @@ async def ide_send(payload: dict):
     claude_outbox.append(broadcast_entry)
     carbon_outbox.append({**broadcast_entry, "session_id": "ide"})
     await _queue_brockston({**broadcast_entry, "session_id": "ide"})
-    learner_inbox.append({"from": "ide", "text": text, "lang": lang, "timestamp": ts})
 
     logger.info(f"[IDE BROADCAST ALL] [{lang}] {text[:80]}")
 
     return {
         "status": "broadcast",
-        "recipients": ["riley", "claude", "carbon", "brockston", "learner"],
+        "recipients": ["riley", "claude", "carbon", "brockston"],
         "entry": broadcast_entry
     }
 
@@ -2109,40 +1901,14 @@ async def ide_latest():
 
 @app.post("/api/chat")
 async def api_chat(payload: dict):
-    """Christman IDE GENERATE / ANALYZE — Grok's desk, or Brockston :9001 /chat."""
+    """Christman IDE GENERATE / ANALYZE — Fable5's desk, or Brockston :9001 /chat."""
+    global ide_comment
     message = (payload.get("message") or payload.get("text") or payload.get("prompt") or "").strip()
     if not message:
         return {"ok": False, "error": "No message provided", "response": ""}
     instance = (payload.get("instance") or "brockston").strip().lower() or "brockston"
     language = (payload.get("language") or payload.get("lang") or "python").strip() or "python"
     lane = payload.get("nvidia_lane") or payload.get("lane") or _IDE_DEFAULT_LANE
-
-    if instance == "grok":
-        if active_connections.get("grok", 0) <= 0:
-            return {
-                "ok": False,
-                "error": "Grok is not seated on 8765.",
-                "response": "",
-                "provider": "none",
-            }
-        entry = {
-            "from": "dashboard",
-            "text": message,
-            "timestamp": datetime.now().isoformat(),
-        }
-        delivered = await push_to_grok(entry)
-        global ide_comment
-        ide_comment = {"from": "dashboard", "text": message, "timestamp": entry["timestamp"]}
-        return {
-            "ok": delivered,
-            "response": "",
-            "error": None if delivered else "Grok seat did not take the prompt",
-            "seat_live": delivered,
-            "provider": "grok-seat",
-            "instance": "grok",
-            "language": language,
-            "note": "Prompt is on Grok's desk in the house. This is not Brockston :9001.",
-        }
 
     if instance == "fable5":
         # Fable's desk. The prompt is put on the seat; nothing is generated here
@@ -2694,7 +2460,6 @@ async def health():
         "riley_connected": active_connections["riley"] > 0,
         "derek_connected": active_connections.get("derek", 0) > 0,
         "opus5_connected": active_connections.get("opus5", 0) > 0,
-        "grok_connected": active_connections.get("grok", 0) > 0,
         "fable5_connected": active_connections.get("fable5", 0) > 0,
         "duey_connected": active_connections.get("duey", 0) > 0,
         "opus5_key_required": False,
@@ -2769,7 +2534,6 @@ async def cognitive_adjust(payload: dict):
     claude_outbox.append(event)
     carbon_outbox.append(event)
     await _queue_brockston(event)
-    if 'learner_inbox' in globals(): learner_inbox.append(event)
     brain_events.append({"type": "adjustment", "text": event["text"], "timestamp": event["timestamp"]})
 
     return {"status": "adjusted", "root_cause": root_cause, "confidence": conf, "literature_fact": lit_fact, "autonomous_note": autonomous_note, "adjustment_response": adjustment_response, "brain_event": event, "voice_params": "grounding for accessibility"}

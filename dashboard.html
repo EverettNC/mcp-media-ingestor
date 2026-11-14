@@ -123,10 +123,10 @@
     50% { opacity: 0.4; }
   }
 
-  /* ── Main Grid — Everett | Center | Duey | Brockston | Derek | Learner | Opus 5 ── */
+  /* ── Main Grid — Everett | Center | Duey | Brockston | Derek | Opus 5 | Fable5 ── */
   .grid {
     display: grid;
-    grid-template-columns: 1fr 2fr 1fr 1fr 1fr 1fr 1fr 1fr;
+    grid-template-columns: 1fr 2fr 1fr 1fr 1fr 1fr 1fr;
     gap: 16px;
     padding: 20px;
     max-width: 2200px;
@@ -206,7 +206,6 @@
   #claude-card    { --accent: var(--gold); }
   #duey-card      { --accent: var(--purple); }
   #brockston-card { --accent: var(--amber); }
-  #learner-card    { --accent: var(--pink); }
   #opus5-card-top  { --accent: #e07040; }
   #fable5-2-card       { --accent: #d4d4d8; }
 
@@ -308,23 +307,6 @@
     line-height: 1.5;
   }
   .brockston-label { font-size: 9px; letter-spacing: 3px; color: var(--amber); text-transform: uppercase; margin-bottom: 6px; }
-
-  /* Learner channel */
-  .learner-channel { padding: 12px; }
-  .learner-inbox {
-    background: rgba(255,105,180,0.06);
-    border: 1px solid rgba(255,105,180,0.2);
-    border-radius: 8px;
-    padding: 12px;
-    min-height: 60px;
-    font-size: 12px;
-    color: #ffb3d9;
-    margin-bottom: 10px;
-    letter-spacing: 0.5px;
-    text-align: left;
-    line-height: 1.5;
-  }
-  .learner-label { font-size: 9px; letter-spacing: 3px; color: var(--pink); text-transform: uppercase; margin-bottom: 6px; }
 
   /* Opus 5 · Claude family */
   .opus5-channel { padding: 12px; }
@@ -447,9 +429,7 @@
   .log-entry.duey    { border-color: var(--purple); }
   .log-entry.claude    { border-color: var(--gold); }
   .log-entry.brockston { border-color: var(--amber); }
-  .log-entry.learner    { border-color: var(--pink); }
   .log-entry.opus5      { border-color: #e07040; }
-  .log-entry.grok       { border-color: #d4d4d8; }
   .log-entry.fable5     { border-color: #d4d4d8; }
   .log-entry .log-who {
     font-size: 9px;
@@ -945,7 +925,6 @@
     <div class="status-item"><div class="dot" id="vision-dot"></div><span>VISION</span></div>
     <div class="status-item"><div class="dot" id="duey-dot"></div><span>DUEY</span></div>
     <div class="status-item"><div class="dot" id="brockston-dot"></div><span>BROCKSTON</span></div>
-    <div class="status-item"><div class="dot" id="learner-dot-status"></div><span>LEARNER</span></div>
     <div class="status-item"><div class="dot" id="opus5-dot"></div><span>OPUS 5</span></div>
     <div class="status-item"><div class="dot" id="derek-dot"></div><span>DEREK 309</span></div>
     <div class="status-item"><div class="dot" id="fable5-dot"></div><span>FABLE 5</span></div>
@@ -1063,22 +1042,6 @@
       </div>
     </div>
 
-    <!-- Learner Card -->
-    <div class="agent-card" id="learner-card">
-      <div class="agent-ring" id="learner-ring">🌟</div>
-      <div class="agent-name">Learner</div>
-      <div class="agent-role">Student · Carbon</div>
-      <div class="agent-status" id="learner-card-status">OFFLINE</div>
-      <div class="learner-channel">
-        <div class="learner-label">Latest from Learner</div>
-        <div class="learner-inbox" id="learner-inbox-display">Awaiting connection...</div>
-        <div class="instance-badge" style="color: var(--pink);">
-          <div class="dot" id="learner-dot"></div>
-          <span id="learner-session-label">--</span>
-        </div>
-      </div>
-    </div>
-
     <!-- Opus 5 · Claude family — house seat, no API key -->
     <div class="agent-card" id="opus5-card-top">
       <div class="agent-ring" id="opus5-ring">🟠</div>
@@ -1119,7 +1082,6 @@
       <option value="duey">Duey</option>
       <option value="brockston">Brockston</option>
       <option value="derek">Derek</option>
-      <option value="learner">Learner</option>
       <option value="opus5">Opus 5</option>
       <option value="fable5">Fable5</option>
     </select>
@@ -1152,10 +1114,6 @@
     <div class="stat-card">
       <div class="stat-value" id="stat-brockston" style="color: var(--amber);">0</div>
       <div class="stat-label">Brockston WS</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-value pink" id="stat-learner">0</div>
-      <div class="stat-label">Learner Inbox</div>
     </div>
     <div class="stat-card">
       <div class="stat-value green" id="stat-uptime">LIVE</div>
@@ -1304,7 +1262,6 @@
   let lastClaude = '';
   let lastBrockston = '';
   let brockstonWasOnline = false;
-  let lastLearner = '';
   let lastOpus5 = '';
   let lastFable5 = '';
   let lastBrainLog = '';
@@ -1341,7 +1298,6 @@
       else if (who === 'duey') pollDuey();
       else if (who === 'brockston') pollBrockston();
       else if (who === 'derek') pollClaude();
-      else if (who === 'learner') pollLearner();
       else if (who === 'opus5') pollOpus5();
       else if (who === 'fable5') pollFable5();
     } catch (e) {}
@@ -1680,48 +1636,6 @@
     } catch (e) {}
   }
 
-  async function pollLearner() {
-    try {
-      const statusR = await fetch('/learner/status');
-      const s = await statusR.json();
-      const isOnline = s.learner_connected;
-
-      document.getElementById('learner-dot-status').className = isOnline ? 'dot alive' : 'dot dead';
-      document.getElementById('learner-dot').className = isOnline ? 'dot alive' : 'dot dead';
-      document.getElementById('stat-learner').textContent = s.inbox_depth || 0;
-
-      const r = await fetch('/learner/latest');
-      const d = await r.json();
-      const text = (d.text || '').trim();
-
-      if (isOnline && document.getElementById('learner-card-status').textContent === 'OFFLINE') {
-        document.getElementById('learner-card-status').textContent = 'ONLINE';
-        document.getElementById('learner-session-label').textContent = 'CONNECTED';
-        addLog('Learner · Student', 'Learner has joined the bridge.', 'learner');
-      } else if (!isOnline) {
-        document.getElementById('learner-card-status').textContent = 'OFFLINE';
-        document.getElementById('learner-session-label').textContent = '--';
-      }
-
-      if (text && text !== lastLearner && text !== 'Awaiting connection...') {
-        lastLearner = text;
-        document.getElementById('learner-inbox-display').textContent = text;
-        document.getElementById('learner-ring').classList.add('speaking');
-        document.getElementById('learner-card').classList.add('active');
-        document.getElementById('learner-card-status').textContent = 'SPEAKING';
-        setTimeout(() => {
-          document.getElementById('learner-ring').classList.remove('speaking');
-          document.getElementById('learner-card').classList.remove('active');
-          document.getElementById('learner-card-status').textContent = isOnline ? 'ONLINE' : 'OFFLINE';
-        }, 4000);
-        addLog('Learner · Student', text, 'learner');
-      }
-    } catch(e) {
-      document.getElementById('learner-dot-status').className = 'dot dead';
-      document.getElementById('learner-dot').className = 'dot dead';
-    }
-  }
-
   async function pollVision() {
     try {
       const r = await fetch('/vision/latest');
@@ -1758,7 +1672,6 @@
   setInterval(pollDuey,       2000);
   setInterval(pollClaude,     2000);
   setInterval(pollBrockston,  2000);
-  setInterval(pollLearner,     2000);
   async function pollFable5() {
     try {
       var statusR = await fetch('/fable5/status');
@@ -1898,7 +1811,6 @@
   if (window.__BRIDGE_BOOT__) applyBrockstonState(window.__BRIDGE_BOOT__);
   pollClaude();
   pollBrockston();
-  pollLearner();
   pollOpus5();
   pollFable5();
   pollIde();

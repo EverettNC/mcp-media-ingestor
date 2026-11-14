@@ -166,4 +166,4 @@ External runtime: ffmpeg (required, checked in server.py).
 
 See the clean find output for authoritative list. Core surface files: server.py, main.py, christman_studio.py, music_engine.py, alpha_zero_latency/*/*.py, RILEY.py, EAR/SPEAK/TONE.py, realtime_*/mic_*/voice_loop.py.
 
-**Generated**: by code indexing pass (Grok). All facts derived from direct file reads + symbol greps on the working tree at the time of indexing.
+**Generated**: by code indexing pass. All facts derived from direct file reads + symbol greps on the working tree at the time of indexing.
