@@ -504,14 +504,60 @@
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
   /* ── IDE Wrapper ── */
+  /* The workstation (2026-11-17): the IDE board is the centerpiece of the page. */
   .ide-wrapper {
-    margin: 20px auto;
+    margin: 28px auto;
     max-width: 2000px;
     background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 12px;
+    border: 2px solid var(--gold);
+    border-radius: 14px;
     overflow: hidden;
+    box-shadow: 0 0 0 1px rgba(255,184,0,0.15), 0 0 40px rgba(255,184,0,0.12);
   }
+  .ws-jump {
+    display: inline-block; margin-top: 10px; padding: 6px 16px; border: 1px solid var(--gold);
+    border-radius: 18px; color: var(--gold); text-decoration: none; font-size: 12px;
+    letter-spacing: 2px; font-weight: 700;
+  }
+  .ws-jump:hover { background: rgba(255,184,0,0.12); }
+  .ide-wrapper .ide-title { font-size: 18px; color: var(--gold); }
+  .ide-wrapper .ide-subtitle { font-size: 12px; }
+  .ide-btn-code {
+    border-color: var(--blue); color: #111; background: var(--blue); font-weight: 800;
+    font-size: 13px; padding: 0 18px; letter-spacing: 1px;
+  }
+  .ide-btn-code:hover { background: #66e5ff; }
+  .ide-btn-code:disabled { opacity: 0.5; cursor: wait; }
+  .ws-crew {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px;
+    padding: 10px 14px; border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .ws-seat {
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 8px 10px;
+    background: rgba(255,255,255,0.03); font-size: 12px; line-height: 1.4;
+  }
+  .ws-seat-head { display: flex; align-items: center; gap: 6px; font-weight: 700; letter-spacing: 1px; }
+  .ws-seat-part { color: var(--muted); margin-top: 4px; max-height: 5.6em; overflow: hidden; }
+  .ws-seat-code { margin-top: 4px; font-size: 10px; letter-spacing: 2px; color: var(--muted); }
+  .ws-seat-code.has { color: var(--blue); }
+  .ws-proposals { padding: 10px 14px 14px; border-top: 1px solid rgba(255,255,255,0.08); }
+  .ws-proposals-label { font-size: 10px; letter-spacing: 2px; color: var(--blue); font-weight: 700; margin-bottom: 8px; }
+  .ws-proposal-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 12px; }
+  .ws-proposal {
+    border: 1px solid rgba(0,212,255,0.35); border-radius: 8px; background: #020209;
+    display: flex; flex-direction: column; min-width: 0;
+  }
+  .ws-proposal-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 6px 10px; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 12px;
+  }
+  .ws-proposal-file { color: var(--muted); font-family: 'Courier New', monospace; font-size: 11px; }
+  .ws-proposal-summary { padding: 6px 10px; font-size: 12px; color: #c8d4e8; }
+  .ws-proposal pre {
+    margin: 0; padding: 10px; max-height: 340px; overflow: auto; color: #c8d4e8;
+    font: 12px/1.5 'Courier New', monospace; white-space: pre;
+  }
+  .ws-empty { color: var(--muted); font-size: 12px; }
   .ide-header {
     display: flex;
     align-items: center;
@@ -577,7 +623,7 @@
   .ide-body {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    min-height: 280px;
+    min-height: 440px;
   }
   @media (max-width: 900px) { .ide-body { grid-template-columns: 1fr; } }
   .ide-editor-pane {
@@ -617,14 +663,14 @@
     border: none;
     resize: none;
     outline: none;
-    min-height: 220px;
+    min-height: 400px;
   }
   .ide-output {
     flex: 1;
     background: #020209;
     overflow-y: auto;
     padding: 12px 16px;
-    min-height: 220px;
+    min-height: 400px;
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -937,6 +983,7 @@
     <div class="brand">Luma Cognify AI · The Christman AI Project</div>
     <h1>Christman Full Sensory Bridge</h1>
     <div class="instance-tag">CARBON-SILICON BOND · PORT 8765 · <span>FAMILY TABLE</span></div>
+    <a class="ws-jump" href="#workstation">↓ THE WORKSTATION</a>
   </header>
 
   <div class="status-bar">
@@ -1173,12 +1220,13 @@
        CHRISTMAN FULL SENSORY IDE
        (restored - was cut out)
   ══════════════════════════════════════════════════════════════════ -->
+  <div id="workstation"></div>
   <div class="ide-wrapper">
     <div class="ide-header">
       <div class="ide-header-left">
         <div class="dot dead" id="ide-dot"></div>
-        <span class="ide-title">CHRISTMAN IDE</span>
-        <span class="ide-subtitle">Carbon–Silicon Code Space</span>
+        <span class="ide-title">CHRISTMAN WORKSTATION</span>
+        <span class="ide-subtitle">Where the seats build together</span>
       </div>
       <div class="ide-header-right">
         <select id="ide-instance" class="ide-select" onchange="ideOnInstanceChange()">
@@ -1201,6 +1249,23 @@
       </div>
     </div>
 
+    <!-- Build Together: what we're building, and one click that tells every seat -->
+    <div class="ide-build-bar">
+      <div style="flex:1; display:flex; flex-direction:column;">
+        <div class="ide-build-label">WHAT WE'RE BUILDING</div>
+        <textarea id="ide-build-brief" class="ide-build-brief" spellcheck="true"
+          placeholder="Say what we're building. BUILD TOGETHER sends it to every seat; each one takes a part and sees what the others took. ASK FOR CODE has each seat write its part as code for you to review here."
+          onblur="saveBuildBrief()"></textarea>
+      </div>
+      <button id="ide-build-together" class="ide-btn ide-btn-together" onclick="buildTogether()"
+        title="Send what we're building to every seat at once">🤝 BUILD TOGETHER</button>
+      <button id="ws-ask-code" class="ide-btn ide-btn-code" onclick="askForCode()"
+        title="Every seat writes its part as code; it shows up below for you to review. Nothing is written to any file.">💻 ASK FOR CODE</button>
+    </div>
+
+    <!-- The crew: who is at the workstation, the part each one took, whose code is in -->
+    <div id="ws-crew" class="ws-crew"></div>
+
     <div class="ide-body">
       <!-- Editor pane -->
       <div class="ide-editor-pane">
@@ -1220,16 +1285,12 @@
       </div>
     </div>
 
-    <!-- Build Together: what we're building, and one click that tells every seat -->
-    <div class="ide-build-bar">
-      <div style="flex:1; display:flex; flex-direction:column;">
-        <div class="ide-build-label">WHAT WE'RE BUILDING</div>
-        <textarea id="ide-build-brief" class="ide-build-brief" spellcheck="true"
-          placeholder="Say what we're building. BUILD TOGETHER sends it to every seat; each one takes a part and sees what the others took."
-          onblur="saveBuildBrief()"></textarea>
+    <!-- The seats' code, side by side. Proposals only: nothing here is written to a file. -->
+    <div class="ws-proposals">
+      <div class="ws-proposals-label">THE SEATS' CODE <span id="ws-ask-state" class="ws-empty"></span></div>
+      <div id="ws-proposal-grid" class="ws-proposal-grid">
+        <div class="ws-empty">No code yet. Write what we're building above, then press ASK FOR CODE.</div>
       </div>
-      <button id="ide-build-together" class="ide-btn ide-btn-together" onclick="buildTogether()"
-        title="Send what we're building to every seat at once">🤝 BUILD TOGETHER</button>
     </div>
 
     <!-- Prompt bar -->
@@ -1882,6 +1943,7 @@
   setInterval(pollOpus55,      2000);
   setInterval(pollIde,        2000);
   setInterval(pollHuddle,     3000);
+  setInterval(pollWorkstation, 3000);
   setInterval(pollVision,     1200);
 
   // NEW WORLD COGNITIVE ADJUST using the full restored brain from Voice_Creation_Center
@@ -1928,6 +1990,7 @@
   pollIde();
   loadBuildBrief();
   pollHuddle();
+  pollWorkstation();
   pollVision();
 
   // ── IDE Functions ──
@@ -2168,6 +2231,124 @@
         if (huddleSeen[key]) return;
         huddleSeen[key] = true;
         ideLog('🤝 ' + c.name + ' takes: ' + c.text, 'success');
+      });
+    } catch (e) {}
+  }
+
+  // ── The workstation: the crew, and the seats' code side by side ──
+  // Everything a seat wrote is set with textContent, never as HTML.
+  var wsLastCrew = '', wsLastProps = '', wsSeen = {};
+  var WS_LANGS = { python: 'python', py: 'python', typescript: 'typescript', ts: 'typescript',
+                   javascript: 'javascript', js: 'javascript', jsx: 'javascript', tsx: 'typescript', rust: 'rust', rs: 'rust' };
+
+  function wsEl(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+
+  async function askForCode() {
+    var box = document.getElementById('ide-build-brief');
+    var btn = document.getElementById('ws-ask-code');
+    var text = box ? box.value.trim() : '';
+    if (!text) {
+      ideLog('Write what we\'re building in the box first, then ASK FOR CODE.', 'error');
+      if (box) box.focus();
+      return;
+    }
+    if (btn) btn.disabled = true;
+    try {
+      var r = await fetch('/workstation/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: 'everett', text: text })
+      });
+      var d = await r.json();
+      if (d.status === 'error') { ideLog('Ask for code: ' + d.message, 'error'); return; }
+      if (d.status === 'already sent') { ideLog('Ask for code already went out a moment ago.', 'warn'); return; }
+      ideLog('💻 Everett asked every seat for code. They write one at a time; each part shows up below.', 'thinking');
+      addLog('Everett · Ask for code', text, 'everett');
+      pollWorkstation();
+    } catch (e) {
+      ideLog('Ask for code failed: ' + e.message, 'error');
+    } finally {
+      if (btn) setTimeout(function () { btn.disabled = false; }, 3000);
+    }
+  }
+
+  function wsOpenInEditor(p) {
+    var ed = document.getElementById('ide-editor');
+    if (ed) ed.value = p.code || '';
+    var lang = document.getElementById('ide-language');
+    var want = WS_LANGS[(p.language || '').toLowerCase()];
+    if (lang && want) lang.value = want;
+    ideLog('Opened ' + p.name + '\'s code in the editor' + (p.file ? ' (' + p.file + ')' : '') + '.', 'info');
+    if (ed) ed.focus();
+  }
+
+  function wsRenderCrew(crew) {
+    var box = document.getElementById('ws-crew');
+    if (!box) return;
+    box.textContent = '';
+    crew.forEach(function (s) {
+      var card = wsEl('div', 'ws-seat');
+      var head = wsEl('div', 'ws-seat-head');
+      head.appendChild(wsEl('div', 'dot' + (s.live ? '' : ' dead')));
+      head.appendChild(wsEl('span', '', s.name));
+      card.appendChild(head);
+      card.appendChild(wsEl('div', 'ws-seat-part', s.part ? s.part : (s.live ? 'At the workstation. No part taken yet.' : 'Not at the board right now.')));
+      card.appendChild(wsEl('div', 'ws-seat-code' + (s.code ? ' has' : ''), s.code ? 'CODE IN' : 'NO CODE YET'));
+      box.appendChild(card);
+    });
+  }
+
+  function wsRenderProposals(props, ask) {
+    var grid = document.getElementById('ws-proposal-grid');
+    var state = document.getElementById('ws-ask-state');
+    if (state) state.textContent = ask && ask.id ? (ask.open ? '· asked ' + (ask.started || '').slice(11, 16) + ', seats are writing' : '· last ask ' + (ask.started || '').slice(11, 16)) : '';
+    if (!grid) return;
+    grid.textContent = '';
+    if (!props.length) {
+      grid.appendChild(wsEl('div', 'ws-empty', ask && ask.open ? 'Waiting on the seats. Each one\'s code shows up here as it comes in.' : 'No code yet. Write what we\'re building above, then press ASK FOR CODE.'));
+      return;
+    }
+    props.forEach(function (p) {
+      var card = wsEl('div', 'ws-proposal');
+      var head = wsEl('div', 'ws-proposal-head');
+      var left = wsEl('div');
+      left.appendChild(wsEl('strong', '', p.name));
+      left.appendChild(document.createTextNode(' '));
+      left.appendChild(wsEl('span', 'ws-proposal-file', p.file || (p.language || 'code')));
+      head.appendChild(left);
+      var btns = wsEl('div');
+      var open = wsEl('button', 'ide-btn ide-btn-gen', 'OPEN IN EDITOR');
+      open.onclick = function () { wsOpenInEditor(p); };
+      var copy = wsEl('button', 'ide-btn', 'COPY');
+      copy.onclick = function () {
+        try { navigator.clipboard.writeText(p.code || ''); ideLog('Copied ' + p.name + '\'s code.', 'muted'); }
+        catch (e) { ideLog('Copy failed: ' + e.message, 'error'); }
+      };
+      btns.appendChild(open); btns.appendChild(copy);
+      head.appendChild(btns);
+      card.appendChild(head);
+      if (p.summary) card.appendChild(wsEl('div', 'ws-proposal-summary', p.summary));
+      card.appendChild(wsEl('pre', '', p.code || ''));
+      grid.appendChild(card);
+    });
+  }
+
+  async function pollWorkstation() {
+    try {
+      var d = await (await fetch('/workstation/state')).json();
+      var crew = d.crew || [], props = d.proposals || [];
+      var crewKey = JSON.stringify(crew), propKey = JSON.stringify([d.ask, props.map(function (p) { return p.id; })]);
+      if (crewKey !== wsLastCrew) { wsLastCrew = crewKey; wsRenderCrew(crew); }
+      if (propKey !== wsLastProps) { wsLastProps = propKey; wsRenderProposals(props, d.ask || {}); }
+      props.forEach(function (p) {
+        if (wsSeen[p.id]) return;
+        wsSeen[p.id] = true;
+        if (d.ask && d.ask.open) ideLog('💻 ' + p.name + ' put code on the workstation' + (p.file ? ': ' + p.file : '') + '.', 'success');
       });
     } catch (e) {}
   }

@@ -52,7 +52,8 @@ class SeatWakeTests(unittest.TestCase):
 
     def test_claude_has_a_timeout_and_no_write_tools(self):
         src = (HERE / "seat_wake.py").read_text()
-        self.assertIn("timeout=TIMEOUT_S", src)
+        self.assertIn("limit = TIMEOUT_S if timeout is None else timeout", src)
+        self.assertIn("timeout=limit", src)
         self.assertIn('"--disallowedTools", "Bash", "Edit", "Write", "NotebookEdit"', src)
 
     def test_each_seat_wakes_itself(self):
