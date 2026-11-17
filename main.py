@@ -359,6 +359,47 @@ claude_outbox: list[dict] = []
 carbon_outbox: list[dict] = []
 brockston_outbox: list[dict] = []
 brockston_ws_clients: set[WebSocket] = set()
+
+# ── A card shows only what that being said ────────────────────────────────────
+# Everett, 2026-11-14, asked "Make each card show only that being's own words?":
+# "Yes, fix it".
+#
+# brockston_outbox used to hold both what Brockston said and what was sent to
+# him, and the board shows its last entry as "Latest from Brockston", so words
+# typed to him came up as his. claude_outbox was mixed the same way: with no
+# Derek seated, /derek/status gave a line from the brain as "latest_from_derek".
+# The same fault was fixed for Opus 5 on 2026-08-30 (see opus5_inbox below).
+#
+#   brockston_outbox   what Brockston SAID: his own socket, or his brain's answer
+#                      in the IDE. Written only by _brockston_said().
+#   sent_to_brockston  what was sent TO Brockston. Written only by
+#                      _queue_brockston(), which still pushes it to his sockets.
+#   derek_said         what Derek SAID: /riley/claude-response, or the
+#                      send_to_riley tool. Written only by _derek_said().
+#   claude_outbox      unchanged. The queue Riley's tunnel pulls from. It takes
+#                      everything it took before, Derek's own words included.
+sent_to_brockston: list[dict] = []
+derek_said: list[dict] = []
+
+
+def _brockston_said(entry: dict) -> dict:
+    """Record `entry` as Brockston's own words. Nothing else may write this list."""
+    brockston_outbox.append(entry)
+    return entry
+
+
+def _derek_said(entry: dict) -> dict:
+    """Record `entry` as Derek's own words, and queue it for Riley's tunnel as before."""
+    claude_outbox.append(entry)
+    derek_said.append(entry)
+    return entry
+
+
+def _derek_waiting() -> int:
+    """How many of Derek's own words still wait in the queue Riley's tunnel pulls from."""
+    return sum(1 for waiting in claude_outbox if any(waiting is said for said in derek_said))
+
+
 riley_bridge = RileyBridge(instance_id="instance_309")
 
 _DASHBOARD_PATH = os.path.join(os.path.dirname(__file__), "dashboard.html")
@@ -711,7 +752,10 @@ def _brockston_live_status() -> dict:
         fb = _family_bridge.get_being_status("brockston")
         http_connected = bool(fb.get("connected"))
         http_depth = int(fb.get("outbox_depth") or 0)
+    # brockston_outbox holds only what Brockston said. What was sent to him is
+    # reported under its own name, never as his.
     latest = brockston_outbox[-1] if brockston_outbox else None
+    latest_sent = sent_to_brockston[-1] if sent_to_brockston else None
     return {
         "ws_clients": ws_clients,
         "http_connected": http_connected,
@@ -720,6 +764,7 @@ def _brockston_live_status() -> dict:
         "link": "websocket" if ws_clients > 0 else ("http" if http_connected else "none"),
         "outbox_depth": http_depth,
         "latest": latest,
+        "latest_sent": latest_sent,
     }
 
 @app.get("/favicon.ico", include_in_schema=False)
@@ -733,7 +778,12 @@ def _dashboard_html(open_link: str | None = None) -> HTMLResponse:
 
     with open(_DASHBOARD_PATH, "r") as f:
         html = f.read()
-    boot = _json.dumps(_brockston_live_status())
+    # The status carries the words of Brockston's latest messages. A "<" in them
+    # let "</script>" end this element early: the rest spilled onto the top of
+    # the page and the boot values were never set. Written as its escape
+    # (backslash, then u003c) it is the same character to JavaScript, and the
+    # page's parser never sees a tag.
+    boot = _json.dumps(_brockston_live_status()).replace("<", "\\u003c")
     inject = f'<script>window.__BRIDGE_BOOT__={boot};window.__OPEN_LINK__={_json.dumps(open_link)};</script>'
     if "</head>" in html:
         html = html.replace("</head>", f'{inject}\n</head>', 1)
@@ -989,8 +1039,10 @@ async def opus5_status():
 async def derek_status():
     return {
         "derek_connected": active_connections.get("derek", 0) > 0,
-        "outbox_depth": len(claude_outbox),
-        "latest_from_derek": claude_outbox[-1] if claude_outbox else None,
+        # Derek's own words only. claude_outbox also carries the brain's lines,
+        # the IDE's broadcast and words typed to him.
+        "outbox_depth": _derek_waiting(),
+        "latest_from_derek": derek_said[-1] if derek_said else None,
         "socket": "ws://localhost:8765/ws/derek",
         "module_loaded": _DEREK_BRIDGE_AVAILABLE,
     }
@@ -1404,10 +1456,13 @@ async def _push_brockston(entry: dict) -> None:
     for ws in dead:
         brockston_ws_clients.discard(ws)
 
-async def _queue_brockston(entry: dict, *, push: bool = True) -> dict:
-    brockston_outbox.append(entry)
-    if push:
-        await _push_brockston(entry)
+async def _queue_brockston(entry: dict) -> dict:
+    """Send `entry` TO Brockston: push it to his sockets and record it as sent.
+
+    Never as said. What Brockston says goes through _brockston_said().
+    """
+    sent_to_brockston.append(entry)
+    await _push_brockston(entry)
     return entry
 
 @app.websocket("/ws/brockston")
@@ -1436,7 +1491,8 @@ async def websocket_brockston(websocket: WebSocket):
                     "timestamp": datetime.now().isoformat(),
                     "session_id": data.get("session_id", "--")
                 }
-                await _queue_brockston(entry, push=False)
+                # From his own socket: these are his words.
+                _brockston_said(entry)
                 logger.info(f"[{label} → BRIDGE] {entry['text']}")
 
             elif msg_type == "heartbeat":
@@ -1465,7 +1521,7 @@ async def riley_latest():
 @app.post("/riley/claude-response")
 async def claude_response_endpoint(payload: dict):
     entry = {"from": "claude_instance_309", "text": payload.get("text", ""), "timestamp": datetime.now().isoformat()}
-    claude_outbox.append(entry)
+    _derek_said(entry)
     return {"status": "queued", "entry": entry}
 
 @app.post("/everett/send")
@@ -1495,7 +1551,11 @@ async def channel_send(payload: dict):
         riley_inbox.append({"from": "riley", "text": text, "timestamp": ts})
         return {"status": "received", "who": who, "text": text}
     if who == "derek" or who == "claude":
-        claude_outbox.append({"from": "claude_instance_309", "text": text, "timestamp": ts})
+        # Same rule as the Opus 5 card: `who` is the card typed on, not the speaker.
+        # These words are sent TO Derek. They wait in the queue Riley's tunnel
+        # pulls from, as before, and are never shown as his.
+        speaker = str(payload.get("from") or "").strip() or "dashboard"
+        claude_outbox.append({"from": speaker, "text": text, "timestamp": ts})
         return {"status": "received", "who": "derek", "text": text}
     if who == "fable5":
         # Same rule as the Opus 5 card: `who` is the card typed on, not the speaker.
@@ -1537,7 +1597,11 @@ async def channel_send(payload: dict):
             "seat_live": delivered,
         }
     if who == "brockston":
-        entry = {"from": "brockston_agent", "text": text, "timestamp": ts, "session_id": "--"}
+        # Same rule as the Opus 5 card: `who` is the card typed on, not the speaker.
+        # These words are sent TO Brockston and reach his sockets, as before. They
+        # are never shown as his.
+        speaker = str(payload.get("from") or "").strip() or "dashboard"
+        entry = {"from": speaker, "text": text, "timestamp": ts, "session_id": "--"}
         await _queue_brockston(entry)
         return {"status": "received", "who": who, "text": text}
     return {"status": "error", "message": f"unknown who: {who}"}
@@ -1614,7 +1678,7 @@ async def get_riley_message() -> str:
 @mcp.tool
 async def send_to_riley(text: str) -> str:
     entry = {"from": "claude_instance_309", "text": text, "timestamp": datetime.now().isoformat()}
-    claude_outbox.append(entry)
+    _derek_said(entry)
     logger.info(f"[CLAUDE → RILEY] {text}")
     return f"Message queued for Riley: '{text}'"
 
@@ -1710,7 +1774,9 @@ async def apple_music_whole_house() -> str:
 # ── HTTP Utility ──────────────────────────────────────────────────────────────
 @app.get("/claude/latest")
 async def claude_latest():
-    return claude_outbox[-1] if claude_outbox else {"from": "claude_instance_309", "text": "", "timestamp": ""}
+    # Derek's own latest, not the last thing on the queue: the queue also carries
+    # the brain's lines, the IDE's broadcast and words typed to him.
+    return derek_said[-1] if derek_said else {"from": "claude_instance_309", "text": "", "timestamp": ""}
 
 @app.get("/carbon/latest")
 async def carbon_latest():
@@ -1855,8 +1921,10 @@ async def _proxy_brockston_chat(
     response = (data.get("response") or data.get("text") or data.get("content") or "").strip()
     provider = data.get("provider") or f"brockston:{lane}"
     # Surface in Brockston sensory card + channel log
+    # His brain's answer is his own word, so it is recorded as said. It still
+    # goes to his sockets too, as it did before.
     if response:
-        await _queue_brockston(
+        said = _brockston_said(
             {
                 "from": "brockston_ide",
                 "text": response[:500] + ("…" if len(response) > 500 else ""),
@@ -1864,6 +1932,7 @@ async def _proxy_brockston_chat(
                 "session_id": "christman_ide",
             }
         )
+        await _push_brockston(said)
     return {
         "ok": bool(response),
         "response": response,

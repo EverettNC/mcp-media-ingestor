@@ -1317,7 +1317,13 @@
     const log = document.getElementById('message-log');
     const entry = document.createElement('div');
     entry.className = 'log-entry ' + cls;
-    entry.innerHTML = `<div class="log-who">${who}</div>${text}`;
+    // A message is words, not page code. Built with innerHTML, a "<style>" or
+    // an "<img onerror>" inside a being's words acted on the whole board.
+    const whoEl = document.createElement('div');
+    whoEl.className = 'log-who';
+    whoEl.textContent = who;
+    entry.appendChild(whoEl);
+    entry.appendChild(document.createTextNode(String(text)));
     log.appendChild(entry);
     log.scrollTop = log.scrollHeight;
     while (log.children.length > 80) log.removeChild(log.firstChild);
@@ -1371,7 +1377,7 @@
         const bdot = document.getElementById('brain-dot');
         if (bdot) bdot.className = b.integrated ? 'dot alive' : 'dot warn';
         const bcog = document.getElementById('brain-cog');
-        if (bcog) bcog.innerHTML = `🧠 ${b.neural||'neural'} | auto:${b.autonomous_learning||'?'} | lit:${b.literature||'?'}`;
+        if (bcog) bcog.textContent = `🧠 ${b.neural||'neural'} | auto:${b.autonomous_learning||'?'} | lit:${b.literature||'?'}`;
         if (b.last_cognitive && b.last_cognitive !== lastBrainLog) {
           lastBrainLog = b.last_cognitive;
           addLog('🧠 BRAIN', b.last_cognitive, 'brain-event');
@@ -1420,7 +1426,7 @@
         brainFactsMeasured = true;
         const elL = document.getElementById('brain-lit'); if (elL) elL.textContent = `facts: ${d.literature_facts}`;
         const bcog = document.getElementById('brain-cog');
-        if (bcog && d.last_neural) bcog.innerHTML = `🧠 ${d.last_neural.text||'active'} | facts:${d.literature_facts||0}`;
+        if (bcog && d.last_neural) bcog.textContent = `🧠 ${d.last_neural.text||'active'} | facts:${d.literature_facts||0}`;
       }
     } catch(e){}
   }
