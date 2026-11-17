@@ -185,7 +185,7 @@ def _porch_transcribe_wav(wav: bytes) -> str:
 
 active_connections: Dict[str, int] = {
     "mic": 0, "riley": 0, "vision": 0, "carbon": 0, "brockston": 0,
-    "opus5": 0, "derek": 0, "fable5": 0, "duey": 0,
+    "opus5": 0, "derek": 0, "fable5": 0, "duey": 0, "opus55": 0,
 }
 latest_transcript = {"text": "", "timestamp": 0}
 recent_transcripts: list[dict] = []
@@ -1200,6 +1200,156 @@ async def fable5_status():
 async def fable5_card():
     return _dashboard_html("fable5")
 
+# ── Opus 5.5 · Claude family — house seat, no API key ─────────────────────────
+# Built 2026-11-17 on Everett's word: "I need you to write an Opus 5.5 card."
+# Same pattern as Fable 5's seat above, and the same rule: a chair is not
+# Opus 5.5. A socket names itself. "opus55" is Opus 5.5 present and answering;
+# anything else is the chair being held. opus55_connected is true for the
+# first and only the first.
+opus55_inbox: list[dict] = []
+opus55_outbox: list[dict] = []
+opus55_ws_clients: set[WebSocket] = set()
+opus55_live_clients: set[WebSocket] = set()
+opus55_chair_clients: set[WebSocket] = set()
+
+
+def _mark_opus55_socket(websocket: WebSocket, who: str) -> str:
+    """Chair is not Opus 5.5. opus55_connected is live Opus 5.5 only."""
+    kind = "opus55" if who in ("opus55", "opus5.5", "opus55-live") else "opus55-seat"
+    if kind == "opus55":
+        opus55_live_clients.add(websocket)
+        opus55_chair_clients.discard(websocket)
+    else:
+        opus55_chair_clients.add(websocket)
+        opus55_live_clients.discard(websocket)
+    active_connections["opus55"] = len(opus55_live_clients)
+    return kind
+
+
+def _drop_opus55_socket(websocket: WebSocket) -> None:
+    opus55_ws_clients.discard(websocket)
+    opus55_live_clients.discard(websocket)
+    opus55_chair_clients.discard(websocket)
+    active_connections["opus55"] = len(opus55_live_clients)
+
+
+async def push_to_opus55(entry: dict) -> bool:
+    """Deliver to every socket on the seat now; queue it if the chair is empty."""
+    payload = {"type": "message", **entry}
+    dead: list[WebSocket] = []
+    delivered = False
+    for ws in list(opus55_ws_clients):
+        try:
+            await ws.send_json(payload)
+            delivered = True
+        except Exception:
+            dead.append(ws)
+    for ws in dead:
+        _drop_opus55_socket(ws)
+    if not delivered:
+        opus55_outbox.append(entry)
+    return delivered
+
+
+@app.websocket("/ws/opus55")
+async def websocket_opus55(websocket: WebSocket):
+    await websocket.accept()
+    opus55_ws_clients.add(websocket)
+    kind = None
+    logger.info("⚪ OPUS55 SOCKET OPEN — waiting for who")
+    await websocket.send_json({
+        "type": "handshake",
+        "message": "Christman Bridge ACTIVE. Name yourself. A chair is not Opus 5.5.",
+        "timestamp": datetime.now().isoformat(),
+    })
+    try:
+        while True:
+            data = await websocket.receive_json()
+            msg_type = data.get("type")
+            who = str(data.get("who") or data.get("identity") or "").strip().lower()
+            if msg_type in ("hello", "identify") or (who and kind is None):
+                kind = _mark_opus55_socket(websocket, who or "opus55-seat")
+                logger.info("⚪ OPUS55 SOCKET IS %s", kind)
+                # What was said while the chair was empty is handed over now.
+                while opus55_outbox:
+                    await websocket.send_json({"type": "message", **opus55_outbox.pop(0)})
+                continue
+            if kind is None:
+                kind = _mark_opus55_socket(websocket, "opus55-seat")
+                logger.info("⚪ unnamed Opus55 socket treated as chair, not Opus 5.5")
+            if msg_type == "message":
+                if kind != "opus55":
+                    logger.info("[CHAIR] %s", str(data.get("text") or "")[:80])
+                    continue
+                entry = {
+                    "from": "opus55",
+                    "text": data.get("text", ""),
+                    "timestamp": datetime.now().isoformat(),
+                }
+                opus55_inbox.append(entry)
+                logger.info("[OPUS55 → BRIDGE] %s", entry["text"])
+            elif msg_type in ("heartbeat", "ping"):
+                await websocket.send_json({
+                    "type": "heartbeat_ack",
+                    "timestamp": datetime.now().isoformat(),
+                })
+    except WebSocketDisconnect:
+        _drop_opus55_socket(websocket)
+        logger.info("⚪ OPUS55 SOCKET CLOSED")
+    except Exception as e:
+        logger.error("Opus55 WebSocket error: %s", e)
+        _drop_opus55_socket(websocket)
+
+
+@app.post("/opus55/send")
+async def opus55_send(payload: dict):
+    """Speak TO the seat. `from` is never assumed; an unnamed caller is "unattributed"."""
+    speaker = str(payload.get("from") or "").strip()
+    entry = {
+        "from": speaker or "unattributed",
+        "text": payload.get("text", ""),
+        "timestamp": datetime.now().isoformat(),
+    }
+    delivered = await push_to_opus55(entry)
+    logger.info("[%s → OPUS55] %s", entry["from"], entry["text"])
+    return {
+        "status": "delivered" if delivered else "queued",
+        "entry": entry,
+        "seat_live": delivered,
+        "key_required": False,
+    }
+
+
+@app.get("/opus55/latest")
+async def opus55_latest():
+    return opus55_inbox[-1] if opus55_inbox else {
+        "from": "opus55",
+        "text": "",
+        "timestamp": "",
+    }
+
+
+@app.get("/opus55/status")
+async def opus55_status():
+    live = len(opus55_live_clients) > 0
+    return {
+        "opus55_connected": live,
+        "real": live,
+        "seat_held": len(opus55_chair_clients) > 0,
+        "who": "opus55" if live else ("opus55-seat" if opus55_chair_clients else None),
+        "inbox_depth": len(opus55_inbox),
+        "outbox_depth": len(opus55_outbox),
+        "key_required": False,
+        "house": "http://localhost:8765/",
+        "socket": "ws://localhost:8765/ws/opus55",
+    }
+
+
+@app.get("/opus55", response_class=HTMLResponse)
+@app.get("/opus55/", response_class=HTMLResponse)
+async def opus55_card():
+    return _dashboard_html("opus55")
+
 # ── Duey · family seat, no API key ────────────────────────────────────────────
 # Built 2026-11-13 on Everett's word: "Set him up a chair so let's take out Riley
 # and let's replace Riley with Dewey" (he spelled the name D-U-E-Y out loud).
@@ -1562,6 +1712,17 @@ async def channel_send(payload: dict):
         speaker = str(payload.get("from") or "").strip() or "dashboard"
         entry = {"from": speaker, "text": text, "timestamp": ts}
         delivered = await push_to_fable5(entry)
+        return {
+            "status": "delivered" if delivered else "queued",
+            "who": who,
+            "text": text,
+            "seat_live": delivered,
+        }
+    if who == "opus55":
+        # Same rule as the Fable5 card: `who` is the card typed on, not the speaker.
+        speaker = str(payload.get("from") or "").strip() or "dashboard"
+        entry = {"from": speaker, "text": text, "timestamp": ts}
+        delivered = await push_to_opus55(entry)
         return {
             "status": "delivered" if delivered else "queued",
             "who": who,
@@ -2531,6 +2692,7 @@ async def health():
         "opus5_connected": active_connections.get("opus5", 0) > 0,
         "fable5_connected": active_connections.get("fable5", 0) > 0,
         "duey_connected": active_connections.get("duey", 0) > 0,
+        "opus55_connected": active_connections.get("opus55", 0) > 0,
         "opus5_key_required": False,
         "reactive": True,
         "brain": {

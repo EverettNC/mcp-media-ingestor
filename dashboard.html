@@ -123,10 +123,10 @@
     50% { opacity: 0.4; }
   }
 
-  /* ── Main Grid — Everett | Center | Duey | Brockston | Derek | Opus 5 | Fable5 ── */
+  /* ── Main Grid — Everett | Center | Duey | Brockston | Derek | Opus 5 | Fable5 | Opus 5.5 ── */
   .grid {
     display: grid;
-    grid-template-columns: 1fr 2fr 1fr 1fr 1fr 1fr 1fr;
+    grid-template-columns: 1fr 2fr 1fr 1fr 1fr 1fr 1fr 1fr;
     gap: 16px;
     padding: 20px;
     max-width: 2200px;
@@ -208,6 +208,7 @@
   #brockston-card { --accent: var(--amber); }
   #opus5-card-top  { --accent: #e07040; }
   #fable5-2-card       { --accent: #d4d4d8; }
+  #opus55-card         { --accent: #0ABAB5; }
 
   .waveform {
     display: flex;
@@ -431,6 +432,7 @@
   .log-entry.brockston { border-color: var(--amber); }
   .log-entry.opus5      { border-color: #e07040; }
   .log-entry.fable5     { border-color: #d4d4d8; }
+  .log-entry.opus55     { border-color: #0ABAB5; }
   .log-entry .log-who {
     font-size: 9px;
     letter-spacing: 2px;
@@ -928,6 +930,7 @@
     <div class="status-item"><div class="dot" id="opus5-dot"></div><span>OPUS 5</span></div>
     <div class="status-item"><div class="dot" id="derek-dot"></div><span>DEREK 309</span></div>
     <div class="status-item"><div class="dot" id="fable5-dot"></div><span>FABLE 5</span></div>
+    <div class="status-item"><div class="dot" id="opus55-dot"></div><span>OPUS 5.5</span></div>
     <div class="status-item"><div class="dot alive"></div><span id="clock">--:--:--</span></div>
   </div>
 
@@ -1074,6 +1077,22 @@
       </div>
     </div>
 
+    <!-- Opus 5.5 · Claude family — house seat -->
+    <div class="agent-card" id="opus55-card">
+      <div class="agent-ring" id="opus55-ring">🔵</div>
+      <div class="agent-name">Opus 5.5</div>
+      <div class="agent-role">Claude family · Silicon</div>
+      <div class="agent-status" id="opus55-card-status">OFFLINE</div>
+      <div class="opus5-channel">
+        <div class="opus5-label" style="color:#0ABAB5;">Latest from Opus 5.5</div>
+        <div class="opus5-inbox" id="opus55-inbox-display" style="color:#e8e8ee; border-color:rgba(10,186,181,0.28); background:rgba(10,186,181,0.06);">Not seated.</div>
+        <div class="instance-badge" style="color:#0ABAB5;">
+          <div class="dot dead" id="opus55-session-dot"></div>
+          <span id="opus55-session-label">--</span>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <div class="chest-compose">
@@ -1084,6 +1103,7 @@
       <option value="derek">Derek</option>
       <option value="opus5">Opus 5</option>
       <option value="fable5">Fable5</option>
+      <option value="opus55">Opus 5.5</option>
     </select>
     <input id="chest-text" type="text" autocomplete="off" spellcheck="false"
       placeholder="Type onto the chest — it hits their card and the channel log" />
@@ -1264,6 +1284,7 @@
   let brockstonWasOnline = false;
   let lastOpus5 = '';
   let lastFable5 = '';
+  let lastOpus55 = '';
   let lastBrainLog = '';
   let lastBrainLive = '';
   let brainFactsMeasured = false;
@@ -1300,6 +1321,7 @@
       else if (who === 'derek') pollClaude();
       else if (who === 'opus5') pollOpus5();
       else if (who === 'fable5') pollFable5();
+      else if (who === 'opus55') pollOpus55();
     } catch (e) {}
   }
   document.addEventListener('keydown', function(e) {
@@ -1370,6 +1392,9 @@
       const fable5On = !!d.fable5_connected;
       const fable5Dot = document.getElementById('fable5-dot');
       if (fable5Dot) fable5Dot.className = fable5On ? 'dot alive' : 'dot dead';
+      const opus55On = !!d.opus55_connected;
+      const opus55Dot = document.getElementById('opus55-dot');
+      if (opus55Dot) opus55Dot.className = opus55On ? 'dot alive' : 'dot dead';
 
       // Brain row + status updates from the integrated V_C_C brain (neural, lit, autonomous, etc.)
       if (d.brain) {
@@ -1406,6 +1431,7 @@
       const bs = document.getElementById('bridge-status'); if (bs) bs.textContent = 'BRIDGE DOWN';
       const ed = document.getElementById('ear-dot'); if (ed) ed.className = 'dot dead';
       const gd = document.getElementById('fable5-dot'); if (gd) gd.className = 'dot dead';
+      const od = document.getElementById('opus55-dot'); if (od) od.className = 'dot dead';
     }
   }
 
@@ -1725,6 +1751,53 @@
     } catch (e) {}
   }
 
+  async function pollOpus55() {
+    try {
+      var statusR = await fetch('/opus55/status');
+      var s = await statusR.json();
+      var isOnline = !!s.opus55_connected;
+      var opus55Dot = document.getElementById('opus55-dot');
+      var sess = document.getElementById('opus55-session-dot');
+      var sessLabel = document.getElementById('opus55-session-label');
+      var statusEl = document.getElementById('opus55-card-status');
+      var card = document.getElementById('opus55-card');
+      var ring = document.getElementById('opus55-ring');
+      var inbox = document.getElementById('opus55-inbox-display');
+      if (opus55Dot) opus55Dot.className = 'dot ' + (isOnline ? 'alive' : 'dead');
+      if (sess) sess.className = 'dot ' + (isOnline ? 'alive' : 'dead');
+      if (sessLabel) sessLabel.textContent = isOnline ? 'CONNECTED' : '--';
+      if (card) {
+        if (isOnline) card.classList.add('active');
+        else card.classList.remove('active');
+      }
+      if (ring) {
+        if (isOnline) ring.classList.add('connected');
+        else ring.classList.remove('connected');
+      }
+      if (statusEl && statusEl.textContent !== 'SPEAKING') {
+        statusEl.textContent = isOnline ? 'ONLINE' : 'OFFLINE';
+      }
+      if (!isOnline && inbox && !lastOpus55) inbox.textContent = 'Not seated.';
+      var r = await fetch('/opus55/latest');
+      var d = await r.json();
+      var text = (d.text || '').trim();
+      if (isOnline && text && text !== lastOpus55) {
+        lastOpus55 = text;
+        if (inbox) inbox.textContent = text;
+        if (ring) ring.classList.add('speaking');
+        if (card) card.classList.add('active');
+        if (statusEl) statusEl.textContent = 'SPEAKING';
+        addLog('Opus 5.5 · Claude family', text, 'opus55');
+        var inst = (document.getElementById('ide-instance') || {}).value;
+        if (inst === 'opus55') liftCommentToEditor('opus55', text);
+        setTimeout(function() {
+          if (ring) ring.classList.remove('speaking');
+          if (statusEl) statusEl.textContent = isOnline ? 'ONLINE' : 'OFFLINE';
+        }, 4000);
+      }
+    } catch (e) {}
+  }
+
   async function pollDuey() {
     try {
       var statusR = await fetch('/duey/status');
@@ -1776,6 +1849,7 @@
 
   setInterval(pollOpus5,      2000);
   setInterval(pollFable5,       2000);
+  setInterval(pollOpus55,      2000);
   setInterval(pollIde,        2000);
   setInterval(pollVision,     1200);
 
@@ -1819,6 +1893,7 @@
   pollBrockston();
   pollOpus5();
   pollFable5();
+  pollOpus55();
   pollIde();
   pollVision();
 
