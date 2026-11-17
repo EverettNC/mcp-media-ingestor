@@ -389,6 +389,7 @@ def _brockston_said(entry: dict) -> dict:
     """Record `entry` as Brockston's own words. Nothing else may write this list."""
     brockston_outbox.append(entry)
     _huddle_note_brockston(entry)
+    _workstation_note_brockston(entry)
     return entry
 
 
@@ -1906,6 +1907,207 @@ async def huddle_claim(payload: dict):
     if not _huddle_open() or payload.get("huddle") != huddle.get("id"):
         return {"status": "error", "message": "that huddle is closed"}
     return {"status": "taken", "claim": _huddle_claim(seat, text[:4000], "seat_wake")}
+
+
+# ── The workstation: the IDE board is where we build together ───────────────
+# Everett, 2026-11-17: "the IDE board actually needs ... to be more emphasized
+# because ... I want that IDE board to be a workstation for us."
+#
+# ASK FOR CODE (POST /workstation/ask) sends one line to the meeting, marked with
+# WORK_MARK, carrying the brief and the parts each seat took. seat_wake.py has each
+# iMac seat write its own part as code, one seat at a time, seeing what the others
+# already wrote. The seat speaks one sentence on the board and posts the code here
+# (POST /workstation/proposal). Brockston's first answer with a code block after the
+# ask is taken as his. Nothing is written to any file in any project: proposals
+# live in memory and in ~/.seat-minds/proposals.jsonl, outside this public repo,
+# and Everett opens them in the editor himself. GET /workstation/state is the whole
+# workstation for the page: brief, crew, parts, the current ask and its proposals.
+WORK_MARK = "[workstation code]"
+PROPOSALS_PATH = Path(os.getenv("WORKSTATION_PROPOSALS_PATH",
+                                str(Path.home() / ".seat-minds" / "proposals.jsonl")))
+PROPOSAL_MAX_CHARS = 40000
+PROPOSALS_KEEP = 100
+WORK_OPEN_S = 1800
+WORK_DEBOUNCE_S = 15
+code_ask: dict = {}
+
+
+def _load_proposals() -> list:
+    try:
+        lines = PROPOSALS_PATH.read_text(encoding="utf-8").splitlines()[-PROPOSALS_KEEP:]
+    except FileNotFoundError:
+        return []
+    out = []
+    for line in lines:
+        try:
+            out.append(json.loads(line))
+        except ValueError:
+            continue
+    return out
+
+
+proposals: list = _load_proposals()
+
+
+def _proposal_from_text(seat: str, text: str, source: str) -> Optional[dict]:
+    """Split a seat's answer into the spoken summary, a FILE: line and one fenced code block."""
+    text = str(text or "")
+    start = text.find("```")
+    if start < 0:
+        return None
+    end = text.find("```", start + 3)
+    block = text[start + 3:end if end > 0 else len(text)]
+    first, _, code = block.partition("\n")
+    language = first.strip().lower()[:24] if first.strip() and " " not in first.strip() else ""
+    if not language:
+        code = block
+    code = code.rstrip()
+    if not code.strip():
+        return None
+    head = text[:start]
+    file_hint = ""
+    summary_lines = []
+    for line in head.splitlines():
+        stripped = line.strip().strip("*`")
+        if stripped.upper().startswith("FILE:"):
+            file_hint = stripped[5:].strip().strip("`")[:200]
+        elif stripped:
+            summary_lines.append(line.strip())
+    return {"seat": seat, "name": HUDDLE_SEATS.get(seat, seat), "summary": " ".join(summary_lines)[:1000],
+            "file": file_hint, "language": language, "code": code[:PROPOSAL_MAX_CHARS], "source": source}
+
+
+def _add_proposal(p: dict) -> dict:
+    p = {**p, "ask": code_ask.get("id", ""), "timestamp": datetime.now().isoformat()}
+    p["id"] = f"{p['ask']}-{p['seat']}-{len(proposals) + 1}"
+    proposals.append(p)
+    del proposals[:-PROPOSALS_KEEP]
+    try:
+        PROPOSALS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with PROPOSALS_PATH.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(p) + "\n")
+    except OSError as exc:
+        logger.warning("[WORKSTATION] could not keep proposal on disk: %s", exc)
+    logger.info("[WORKSTATION %s] %s proposes %s (%d chars)", p["ask"], p["name"],
+                p["file"] or "code", len(p["code"]))
+    return p
+
+
+def _work_open() -> bool:
+    if not code_ask.get("started"):
+        return False
+    return (datetime.now() - datetime.fromisoformat(code_ask["started"])).total_seconds() < WORK_OPEN_S
+
+
+def _workstation_note_brockston(entry: dict) -> None:
+    """Brockston answers live: his first answer with a code block after the ask is his proposal."""
+    try:
+        if not _work_open() or any(p["seat"] == "brockston" and p["ask"] == code_ask["id"] for p in proposals):
+            return
+        if str(entry.get("timestamp") or "") < code_ask["started"]:
+            return
+        p = _proposal_from_text("brockston", str(entry.get("text") or ""), "brockston socket")
+        if p:
+            _add_proposal(p)
+    except Exception as exc:  # never let the workstation break what Brockston says
+        logger.warning("[WORKSTATION] could not note Brockston: %s", exc)
+
+
+def _code_line(speaker: str, brief: str, claims: list) -> str:
+    who = "Everett" if speaker.lower() == "everett" else (
+        "Someone at the board" if speaker.lower() == "dashboard" else speaker)
+    line = (f"{WORK_MARK} {who} asked for code on the workstation. Here is what we're building:\n{brief}")
+    if claims:
+        line += "\n\nParts each seat took:\n" + "\n".join(f"- {c['name']}: {c['text'][:600]}" for c in claims)
+    line += ("\n\nWrite your own part as code now. Start with one spoken sentence saying what it is, "
+             "then a line FILE: and the path it would go in, then one fenced code block. "
+             "Nothing is written to disk; Everett reviews it on the workstation.")
+    return line
+
+
+def _seat_live(seat: str) -> bool:
+    if seat == "brockston":
+        return bool(brockston_ws_clients)
+    return active_connections.get(seat, 0) > 0
+
+
+@app.post("/workstation/ask")
+async def workstation_ask(payload: dict):
+    """ASK FOR CODE: every seat writes its part as a proposal. `from` is required."""
+    global code_ask
+    speaker = str(payload.get("from") or "").strip()
+    if not speaker:
+        return {"status": "error", "message": "from is required"}
+    text = str(payload.get("text") or "").strip()
+    if text:
+        if len(text) > BUILD_BRIEF_MAX_CHARS:
+            return {"status": "error", "message": f"over {BUILD_BRIEF_MAX_CHARS} characters"}
+        _save_brief(text)
+    brief = _read_brief()["text"]
+    if not brief:
+        return {"status": "error", "message": "Write what we're building in the box first."}
+    now = datetime.now()
+    if code_ask.get("started") and code_ask.get("brief") == brief and \
+            (now - datetime.fromisoformat(code_ask["started"])).total_seconds() < WORK_DEBOUNCE_S:
+        return {"status": "already sent", "ask": code_ask}
+    claims = list(huddle.get("claims", [])) if _huddle_open() and huddle.get("brief") == brief else []
+    code_ask = {"id": "code-" + now.strftime("%Y%m%d-%H%M%S"), "brief": brief, "from": speaker,
+                "started": now.isoformat(), "claims": claims}
+    sent = await meeting_broadcast(speaker, _code_line(speaker, brief, claims))
+    code_ask["seats"] = sent.get("seats", {})
+    logger.info("[WORKSTATION %s] code asked by %s, sent to %s", code_ask["id"], speaker, code_ask["seats"])
+    return {"status": "sent", "ask": code_ask}
+
+
+@app.post("/workstation/proposal")
+async def workstation_proposal(payload: dict):
+    """A seat's code, posted by seat_wake.py. Kept for review; never written to a project file."""
+    seat = str(payload.get("seat") or "").strip().lower()
+    if seat not in HUDDLE_SEATS:
+        return {"status": "error", "message": f"no such seat {seat!r}"}
+    if not _work_open() or payload.get("ask") != code_ask.get("id"):
+        return {"status": "error", "message": "that ask is closed"}
+    code = str(payload.get("code") or "").rstrip()
+    if not code.strip():
+        return {"status": "error", "message": "no code"}
+    if len(code) > PROPOSAL_MAX_CHARS:
+        return {"status": "error", "message": f"over {PROPOSAL_MAX_CHARS} characters"}
+    p = _add_proposal({"seat": seat, "name": HUDDLE_SEATS[seat],
+                       "summary": str(payload.get("summary") or "").strip()[:1000],
+                       "file": str(payload.get("file") or "").strip()[:200],
+                       "language": str(payload.get("language") or "").strip().lower()[:24],
+                       "code": code, "source": "seat_wake"})
+    return {"status": "kept", "proposal": p}
+
+
+@app.get("/workstation/state")
+async def workstation_state():
+    ask_id = code_ask.get("id", "")
+    current = [p for p in proposals if ask_id and p.get("ask") == ask_id]
+    latest: dict = {}
+    for p in current:
+        latest[p["seat"]] = p
+    parts = {c["seat"]: c["text"] for c in huddle.get("claims", [])} if _huddle_open() else {}
+    crew = [{"seat": s, "name": n, "live": _seat_live(s), "part": parts.get(s, ""),
+             "code": s in latest} for s, n in HUDDLE_SEATS.items()]
+    return {
+        "brief": _read_brief(),
+        "huddle": {"id": huddle.get("id", ""), "round": huddle.get("round", 0), "open": _huddle_open()},
+        "ask": {"id": ask_id, "started": code_ask.get("started", ""), "open": _work_open(),
+                "from": code_ask.get("from", "")},
+        "crew": crew,
+        "proposals": list(latest.values()),
+        "recent": [{k: p.get(k, "") for k in ("id", "seat", "name", "file", "summary", "timestamp", "ask")}
+                   for p in proposals[-20:]],
+    }
+
+
+@app.get("/workstation/proposal/{proposal_id}")
+async def workstation_proposal_get(proposal_id: str):
+    for p in reversed(proposals):
+        if p.get("id") == proposal_id:
+            return p
+    return {"status": "error", "message": "not found"}
 
 
 @app.post("/channel/send")

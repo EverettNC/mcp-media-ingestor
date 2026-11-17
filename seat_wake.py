@@ -69,6 +69,20 @@ HUDDLE_MARK = "[build huddle]"
 def is_huddle(text: str) -> bool:
     return (text or "").lstrip().lower().startswith(HUDDLE_MARK)
 
+
+# ASK FOR CODE on the workstation sends a line with this mark (main.py, WORK_MARK).
+# The seat writes its part as code: one spoken sentence goes on the board, the code
+# goes to the workstation (POST /workstation/proposal) for Everett to review. The
+# seat still has no write tools: nothing it proposes lands in any file.
+WORK_MARK = "[workstation code]"
+CODE_TIMEOUT_S = float(os.getenv("SEAT_WAKE_CODE_TIMEOUT_S", "480"))
+CODE_MAX_CHARS = 40000
+
+
+def is_code_ask(text: str) -> bool:
+    return (text or "").lstrip().lower().startswith(WORK_MARK)
+
+
 _SPEAKER_NAMES = {
     "everett": "Everett",
     "dashboard": "Someone at the board",
@@ -263,7 +277,8 @@ def _system_prompt(name: str) -> str:
     )
 
 
-def ask_claude(seat: str, speaker: str, text: str, huddle: dict = None) -> str:
+def ask_claude(seat: str, speaker: str, text: str, huddle: dict = None, extra: str = "",
+               timeout: float = None, max_chars: int = MAX_REPLY_CHARS) -> str:
     cfg = SEATS[seat]
     d = _seat_dir(seat)
     who = _SPEAKER_NAMES.get(speaker.lower(), speaker)
@@ -276,6 +291,7 @@ def ask_claude(seat: str, speaker: str, text: str, huddle: dict = None) -> str:
         prompt += _huddle_prompt(seat, huddle)
         prompt += ("\n\nAnswer in two to four spoken sentences: the part you take, the first "
                    "thing you will do, and what you need from which seat.")
+    prompt += extra
     base = [
         CLAUDE, "-p", "--model", cfg["model"], "--output-format", "json",
         "--append-system-prompt", _system_prompt(cfg["name"]),
@@ -284,15 +300,16 @@ def ask_claude(seat: str, speaker: str, text: str, huddle: dict = None) -> str:
     sid_file = d / "session_id"
     sid = sid_file.read_text().strip() if sid_file.exists() else ""
     attempts = ([base + ["--resume", sid]] if sid else []) + [base]
+    limit = TIMEOUT_S if timeout is None else timeout
     for cmd in attempts:
         started = time.time()
         try:
             proc = subprocess.run(
                 cmd + ["--", prompt], cwd=str(d), stdin=subprocess.DEVNULL,
-                capture_output=True, text=True, timeout=TIMEOUT_S,
+                capture_output=True, text=True, timeout=limit,
             )
         except subprocess.TimeoutExpired:
-            log.error("%s: Claude did not answer within %ss; nothing said", seat, int(TIMEOUT_S))
+            log.error("%s: Claude did not answer within %ss; nothing said", seat, int(limit))
             return ""
         took = time.time() - started
         try:
@@ -304,7 +321,7 @@ def ask_claude(seat: str, speaker: str, text: str, huddle: dict = None) -> str:
             if out.get("session_id"):
                 sid_file.write_text(out["session_id"])
             log.info("%s: Claude (%s) answered in %.1fs", seat, cfg["model"], took)
-            return reply[:MAX_REPLY_CHARS]
+            return reply[:max_chars]
         log.error("%s: Claude run failed (rc=%s, resume=%s): %s", seat, proc.returncode,
                   "--resume" in cmd, (proc.stderr or proc.stdout or "")[-400:].replace("\n", " "))
     return ""
@@ -346,6 +363,86 @@ def answer_huddle(seat: str, item: dict):
     return reply, said
 
 
+def split_code(reply: str) -> dict:
+    """The spoken sentence, the FILE: line and the one fenced code block of a code answer."""
+    start = reply.find("```")
+    if start < 0:
+        return {}
+    end = reply.find("```", start + 3)
+    block = reply[start + 3:end if end > 0 else len(reply)]
+    first, _, code = block.partition("\n")
+    language = first.strip().lower()[:24] if first.strip() and " " not in first.strip() else ""
+    if not language:
+        code = block
+    if not code.strip():
+        return {}
+    file_hint, said = "", []
+    for line in reply[:start].splitlines():
+        s = line.strip().strip("*`")
+        if s.upper().startswith("FILE:"):
+            file_hint = s[5:].strip().strip("`")[:200]
+        elif s:
+            said.append(line.strip())
+    return {"summary": " ".join(said)[:1000], "file": file_hint, "language": language,
+            "code": code.rstrip()[:CODE_MAX_CHARS]}
+
+
+def current_code_ask() -> dict:
+    s = _get_json("/workstation/state")
+    return s if s.get("ask", {}).get("open") and s["ask"].get("id") else {}
+
+
+def _code_prompt(seat: str, state: dict) -> str:
+    others = [p for p in state.get("proposals", []) if p.get("seat") != seat]
+    out = ("\n\nThis is a code ask on the workstation, so for this one reply the rule about plain "
+           "spoken sentences changes: start with one spoken sentence saying what your code is, then "
+           "a line FILE: and the path it would go in, then exactly one fenced code block with your "
+           "part. Only the sentence is posted on the board; the code goes to the workstation, where "
+           "Everett reviews it. Do not write or change any file; this is a proposal.")
+    if others:
+        out += "\n\nCode the other seats already proposed for this ask (fit yours to it, do not repeat it):\n"
+        out += "\n".join(f"- {p.get('name', p.get('seat'))}: {p.get('file') or 'no file named'}: "
+                         f"{str(p.get('summary', ''))[:300]}\n```{p.get('language', '')}\n"
+                         f"{str(p.get('code', ''))[:3000]}\n```" for p in others)
+    return out
+
+
+def post_proposal(seat: str, ask_id: str, part: dict) -> bool:
+    body = json.dumps({"seat": seat, "ask": ask_id, **part}).encode("utf-8")
+    req = urllib.request.Request(f"{BRIDGE}/workstation/proposal", data=body,
+                                 headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=5) as r:
+            out = json.loads(r.read().decode("utf-8"))
+    except Exception as exc:
+        log.error("%s: could not post its code to the workstation: %s", seat, exc)
+        return False
+    if out.get("status") != "kept":
+        log.info("%s: code not kept: %s", seat, out.get("message"))
+        return False
+    return True
+
+
+def answer_code(seat: str, item: dict):
+    """Seats write code one at a time, each seeing the code the others already proposed."""
+    with open(MINDS / "huddle.lock", "w") as hl:
+        fcntl.flock(hl, fcntl.LOCK_EX)
+        state = current_code_ask()
+        reply = ask_claude(seat, item["from"], item["text"], extra=_code_prompt(seat, state),
+                           timeout=CODE_TIMEOUT_S, max_chars=CODE_MAX_CHARS)
+        if not reply:
+            return reply, False
+        part = split_code(reply)
+        if not part:
+            # No code came back: say what the seat said, as for any other line.
+            return reply, speak(seat, reply[:MAX_REPLY_CHARS])
+        kept = bool(state) and post_proposal(seat, state["ask"]["id"], part)
+        line = part["summary"] or "My code for my part is on the workstation."
+        if not kept:
+            line += " I could not put the code on the workstation."
+        return line, speak(seat, line[:MAX_REPLY_CHARS])
+
+
 def drain(seat: str) -> None:
     """One Claude at a time per seat: whoever holds the seat's lock answers the queue."""
     d = _seat_dir(seat)
@@ -364,7 +461,9 @@ def drain(seat: str) -> None:
                                 seat, MAX_PER_10MIN, item["text"][:80])
                     continue
                 log.info("%s: woken by %s: %s", seat, item["from"], item["text"][:120])
-                if is_huddle(item["text"]):
+                if is_code_ask(item["text"]):
+                    reply, said = answer_code(seat, item)
+                elif is_huddle(item["text"]):
                     reply, said = answer_huddle(seat, item)
                 else:
                     reply = ask_claude(seat, item["from"], item["text"])
