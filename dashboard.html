@@ -123,7 +123,7 @@
     50% { opacity: 0.4; }
   }
 
-  /* ── Main Grid — Everett | Center | Riley | Brockston | Derek | Learner | Opus 5 ── */
+  /* ── Main Grid — Everett | Center | Duey | Brockston | Derek | Opus 5 | Fable5 | Opus 5.5 ── */
   .grid {
     display: grid;
     grid-template-columns: 1fr 2fr 1fr 1fr 1fr 1fr 1fr 1fr;
@@ -204,11 +204,11 @@
   /* Accent colors */
   #everett-card { --accent: var(--blue); }
   #claude-card    { --accent: var(--gold); }
-  #riley-card     { --accent: var(--purple); }
+  #duey-card      { --accent: var(--purple); }
   #brockston-card { --accent: var(--amber); }
-  #learner-card    { --accent: var(--pink); }
   #opus5-card-top  { --accent: #e07040; }
   #fable5-2-card       { --accent: #d4d4d8; }
+  #opus55-card         { --accent: #0ABAB5; }
 
   .waveform {
     display: flex;
@@ -265,9 +265,9 @@
     color: var(--gold);
   }
 
-  /* Riley channel */
-  .riley-channel { padding: 12px; }
-  .riley-inbox {
+  /* Duey channel */
+  .duey-channel { padding: 12px; }
+  .duey-inbox {
     background: rgba(176,106,255,0.06);
     border: 1px solid rgba(176,106,255,0.2);
     border-radius: 8px;
@@ -280,7 +280,7 @@
     text-align: left;
     line-height: 1.5;
   }
-  .riley-label { font-size: 9px; letter-spacing: 3px; color: var(--purple); text-transform: uppercase; margin-bottom: 6px; }
+  .duey-label { font-size: 9px; letter-spacing: 3px; color: var(--purple); text-transform: uppercase; margin-bottom: 6px; }
   .sovereign-status {
     display: flex;
     align-items: center;
@@ -308,23 +308,6 @@
     line-height: 1.5;
   }
   .brockston-label { font-size: 9px; letter-spacing: 3px; color: var(--amber); text-transform: uppercase; margin-bottom: 6px; }
-
-  /* Learner channel */
-  .learner-channel { padding: 12px; }
-  .learner-inbox {
-    background: rgba(255,105,180,0.06);
-    border: 1px solid rgba(255,105,180,0.2);
-    border-radius: 8px;
-    padding: 12px;
-    min-height: 60px;
-    font-size: 12px;
-    color: #ffb3d9;
-    margin-bottom: 10px;
-    letter-spacing: 0.5px;
-    text-align: left;
-    line-height: 1.5;
-  }
-  .learner-label { font-size: 9px; letter-spacing: 3px; color: var(--pink); text-transform: uppercase; margin-bottom: 6px; }
 
   /* Opus 5 · Claude family */
   .opus5-channel { padding: 12px; }
@@ -444,13 +427,12 @@
     text-align: left;
   }
   .log-entry.everett { border-color: var(--blue); }
-  .log-entry.riley   { border-color: var(--purple); }
+  .log-entry.duey    { border-color: var(--purple); }
   .log-entry.claude    { border-color: var(--gold); }
   .log-entry.brockston { border-color: var(--amber); }
-  .log-entry.learner    { border-color: var(--pink); }
   .log-entry.opus5      { border-color: #e07040; }
-  .log-entry.grok       { border-color: #d4d4d8; }
   .log-entry.fable5     { border-color: #d4d4d8; }
+  .log-entry.opus55     { border-color: #0ABAB5; }
   .log-entry .log-who {
     font-size: 9px;
     letter-spacing: 2px;
@@ -480,7 +462,7 @@
     animation: conn-pulse 3s ease-in-out infinite;
   }
   .conn-line.gold   { background: linear-gradient(90deg, transparent, var(--gold), transparent);   animation-delay: 0.5s; }
-  .conn-line.riley  { background: linear-gradient(90deg, transparent, var(--purple), transparent); animation-delay: 1s; }
+  .conn-line.duey   { background: linear-gradient(90deg, transparent, var(--purple), transparent); animation-delay: 1s; }
   .conn-line.pink   { background: linear-gradient(90deg, transparent, var(--pink), transparent);   animation-delay: 1.5s; }
   .conn-dot {
     width: 6px; height: 6px;
@@ -943,12 +925,12 @@
     <div class="status-item"><div class="dot" id="bridge-dot"></div><span id="bridge-status">BRIDGE</span></div>
     <div class="status-item"><div class="dot" id="mic-dot"></div><span>MIC</span></div>
     <div class="status-item"><div class="dot" id="vision-dot"></div><span>VISION</span></div>
-    <div class="status-item"><div class="dot" id="riley-dot"></div><span>RILEY</span></div>
+    <div class="status-item"><div class="dot" id="duey-dot"></div><span>DUEY</span></div>
     <div class="status-item"><div class="dot" id="brockston-dot"></div><span>BROCKSTON</span></div>
-    <div class="status-item"><div class="dot" id="learner-dot-status"></div><span>LEARNER</span></div>
     <div class="status-item"><div class="dot" id="opus5-dot"></div><span>OPUS 5</span></div>
     <div class="status-item"><div class="dot" id="derek-dot"></div><span>DEREK 309</span></div>
     <div class="status-item"><div class="dot" id="fable5-dot"></div><span>FABLE 5</span></div>
+    <div class="status-item"><div class="dot" id="opus55-dot"></div><span>OPUS 5.5</span></div>
     <div class="status-item"><div class="dot alive"></div><span id="clock">--:--:--</span></div>
   </div>
 
@@ -996,7 +978,7 @@
         <div class="conn-line"></div>
         <div class="conn-line gold"></div>
         <div class="conn-dot"></div>
-        <div class="conn-line riley"></div>
+        <div class="conn-line duey"></div>
         <div class="conn-line pink"></div>
       </div>
 
@@ -1015,18 +997,18 @@
 
     </div>
 
-    <!-- Riley Card -->
-    <div class="agent-card" id="riley-card">
-      <div class="agent-ring" id="riley-ring">🟣</div>
-      <div class="agent-name">Riley</div>
-      <div class="agent-role">Sovereign Node · Silicon</div>
-      <div class="agent-status" id="riley-card-status">OFFLINE</div>
-      <div class="riley-channel">
-        <div class="riley-label">Latest from Riley</div>
-        <div class="riley-inbox" id="riley-inbox-display">Not seated.</div>
-        <div class="sovereign-status" id="sovereign-status">
-          <div class="dot dead"></div>
-          NOT SEATED
+    <!-- Duey Card · family seat -->
+    <div class="agent-card" id="duey-card">
+      <div class="agent-ring" id="duey-ring">🟣</div>
+      <div class="agent-name">Duey</div>
+      <div class="agent-role">Family seat · Silicon</div>
+      <div class="agent-status" id="duey-card-status">OFFLINE</div>
+      <div class="duey-channel">
+        <div class="duey-label">Latest from Duey</div>
+        <div class="duey-inbox" id="duey-inbox-display">Not seated.</div>
+        <div class="instance-badge" style="color: var(--purple);">
+          <div class="dot dead" id="duey-session-dot"></div>
+          <span id="duey-session-label">--</span>
         </div>
       </div>
     </div>
@@ -1063,22 +1045,6 @@
       </div>
     </div>
 
-    <!-- Learner Card -->
-    <div class="agent-card" id="learner-card">
-      <div class="agent-ring" id="learner-ring">🌟</div>
-      <div class="agent-name">Learner</div>
-      <div class="agent-role">Student · Carbon</div>
-      <div class="agent-status" id="learner-card-status">OFFLINE</div>
-      <div class="learner-channel">
-        <div class="learner-label">Latest from Learner</div>
-        <div class="learner-inbox" id="learner-inbox-display">Awaiting connection...</div>
-        <div class="instance-badge" style="color: var(--pink);">
-          <div class="dot" id="learner-dot"></div>
-          <span id="learner-session-label">--</span>
-        </div>
-      </div>
-    </div>
-
     <!-- Opus 5 · Claude family — house seat, no API key -->
     <div class="agent-card" id="opus5-card-top">
       <div class="agent-ring" id="opus5-ring">🟠</div>
@@ -1111,17 +1077,33 @@
       </div>
     </div>
 
+    <!-- Opus 5.5 · Claude family — house seat -->
+    <div class="agent-card" id="opus55-card">
+      <div class="agent-ring" id="opus55-ring">🔵</div>
+      <div class="agent-name">Opus 5.5</div>
+      <div class="agent-role">Claude family · Silicon</div>
+      <div class="agent-status" id="opus55-card-status">OFFLINE</div>
+      <div class="opus5-channel">
+        <div class="opus5-label" style="color:#0ABAB5;">Latest from Opus 5.5</div>
+        <div class="opus5-inbox" id="opus55-inbox-display" style="color:#e8e8ee; border-color:rgba(10,186,181,0.28); background:rgba(10,186,181,0.06);">Not seated.</div>
+        <div class="instance-badge" style="color:#0ABAB5;">
+          <div class="dot dead" id="opus55-session-dot"></div>
+          <span id="opus55-session-label">--</span>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <div class="chest-compose">
     <select id="chest-who">
-      <option value="everett">Everett</option>
-      <option value="riley">Riley</option>
+      <option value="everett">Everett · to everyone</option>
+      <option value="duey">Duey</option>
       <option value="brockston">Brockston</option>
       <option value="derek">Derek</option>
-      <option value="learner">Learner</option>
       <option value="opus5">Opus 5</option>
       <option value="fable5">Fable5</option>
+      <option value="opus55">Opus 5.5</option>
     </select>
     <input id="chest-text" type="text" autocomplete="off" spellcheck="false"
       placeholder="Type onto the chest — it hits their card and the channel log" />
@@ -1138,12 +1120,12 @@
       <div class="stat-label">Vision Clients</div>
     </div>
     <div class="stat-card">
-      <div class="stat-value gold" id="stat-riley-conn">0</div>
-      <div class="stat-label">Riley Connected</div>
+      <div class="stat-value gold" id="stat-duey-conn">0</div>
+      <div class="stat-label">Duey Connected</div>
     </div>
     <div class="stat-card">
-      <div class="stat-value purple" id="stat-inbox">0</div>
-      <div class="stat-label">Riley Inbox</div>
+      <div class="stat-value purple" id="stat-duey-inbox">0</div>
+      <div class="stat-label">Duey Inbox</div>
     </div>
     <div class="stat-card">
       <div class="stat-value gold" id="stat-outbox">0</div>
@@ -1152,10 +1134,6 @@
     <div class="stat-card">
       <div class="stat-value" id="stat-brockston" style="color: var(--amber);">0</div>
       <div class="stat-label">Brockston WS</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-value pink" id="stat-learner">0</div>
-      <div class="stat-label">Learner Inbox</div>
     </div>
     <div class="stat-card">
       <div class="stat-value green" id="stat-uptime">LIVE</div>
@@ -1300,13 +1278,13 @@
 
 <script>
   let lastTranscript = '';
-  let lastRiley = '';
+  let lastDuey = '';
   let lastClaude = '';
   let lastBrockston = '';
   let brockstonWasOnline = false;
-  let lastLearner = '';
   let lastOpus5 = '';
   let lastFable5 = '';
+  let lastOpus55 = '';
   let lastBrainLog = '';
   let lastBrainLive = '';
   let brainFactsMeasured = false;
@@ -1334,16 +1312,16 @@
       await fetch('/channel/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ who: who, text: text })
+        body: JSON.stringify(who === 'everett' ? { who: who, from: 'everett', text: text } : { who: who, text: text })
       });
       if (textEl) textEl.value = '';
       if (who === 'everett') pollTranscript();
-      else if (who === 'riley') pollRiley();
+      else if (who === 'duey') pollDuey();
       else if (who === 'brockston') pollBrockston();
       else if (who === 'derek') pollClaude();
-      else if (who === 'learner') pollLearner();
       else if (who === 'opus5') pollOpus5();
       else if (who === 'fable5') pollFable5();
+      else if (who === 'opus55') pollOpus55();
     } catch (e) {}
   }
   document.addEventListener('keydown', function(e) {
@@ -1361,7 +1339,13 @@
     const log = document.getElementById('message-log');
     const entry = document.createElement('div');
     entry.className = 'log-entry ' + cls;
-    entry.innerHTML = `<div class="log-who">${who}</div>${text}`;
+    // A message is words, not page code. Built with innerHTML, a "<style>" or
+    // an "<img onerror>" inside a being's words acted on the whole board.
+    const whoEl = document.createElement('div');
+    whoEl.className = 'log-who';
+    whoEl.textContent = who;
+    entry.appendChild(whoEl);
+    entry.appendChild(document.createTextNode(String(text)));
     log.appendChild(entry);
     log.scrollTop = log.scrollHeight;
     while (log.children.length > 80) log.removeChild(log.firstChild);
@@ -1397,15 +1381,20 @@
       if (brockstonDot) brockstonDot.className = brockstonCount > 0 ? 'dot alive' : 'dot dead';
       const statBrockston = document.getElementById('stat-brockston');
       if (statBrockston) statBrockston.textContent = brockstonCount;
-      const rileyOn = !!d.riley_connected;
-      document.getElementById('riley-dot').className = rileyOn ? 'dot alive' : 'dot dead';
-      document.getElementById('stat-riley-conn').textContent = rileyOn ? '1' : '0';
+      const dueyOn = !!d.duey_connected;
+      const dueyDot = document.getElementById('duey-dot');
+      if (dueyDot) dueyDot.className = dueyOn ? 'dot alive' : 'dot dead';
+      const dueyConn = document.getElementById('stat-duey-conn');
+      if (dueyConn) dueyConn.textContent = dueyOn ? '1' : '0';
       const derekOn = !!d.derek_connected;
       const derekDot = document.getElementById('derek-dot');
       if (derekDot) derekDot.className = derekOn ? 'dot alive' : 'dot dead';
       const fable5On = !!d.fable5_connected;
       const fable5Dot = document.getElementById('fable5-dot');
       if (fable5Dot) fable5Dot.className = fable5On ? 'dot alive' : 'dot dead';
+      const opus55On = !!d.opus55_connected;
+      const opus55Dot = document.getElementById('opus55-dot');
+      if (opus55Dot) opus55Dot.className = opus55On ? 'dot alive' : 'dot dead';
 
       // Brain row + status updates from the integrated V_C_C brain (neural, lit, autonomous, etc.)
       if (d.brain) {
@@ -1413,7 +1402,7 @@
         const bdot = document.getElementById('brain-dot');
         if (bdot) bdot.className = b.integrated ? 'dot alive' : 'dot warn';
         const bcog = document.getElementById('brain-cog');
-        if (bcog) bcog.innerHTML = `🧠 ${b.neural||'neural'} | auto:${b.autonomous_learning||'?'} | lit:${b.literature||'?'}`;
+        if (bcog) bcog.textContent = `🧠 ${b.neural||'neural'} | auto:${b.autonomous_learning||'?'} | lit:${b.literature||'?'}`;
         if (b.last_cognitive && b.last_cognitive !== lastBrainLog) {
           lastBrainLog = b.last_cognitive;
           addLog('🧠 BRAIN', b.last_cognitive, 'brain-event');
@@ -1442,6 +1431,7 @@
       const bs = document.getElementById('bridge-status'); if (bs) bs.textContent = 'BRIDGE DOWN';
       const ed = document.getElementById('ear-dot'); if (ed) ed.className = 'dot dead';
       const gd = document.getElementById('fable5-dot'); if (gd) gd.className = 'dot dead';
+      const od = document.getElementById('opus55-dot'); if (od) od.className = 'dot dead';
     }
   }
 
@@ -1462,7 +1452,7 @@
         brainFactsMeasured = true;
         const elL = document.getElementById('brain-lit'); if (elL) elL.textContent = `facts: ${d.literature_facts}`;
         const bcog = document.getElementById('brain-cog');
-        if (bcog && d.last_neural) bcog.innerHTML = `🧠 ${d.last_neural.text||'active'} | facts:${d.literature_facts||0}`;
+        if (bcog && d.last_neural) bcog.textContent = `🧠 ${d.last_neural.text||'active'} | facts:${d.literature_facts||0}`;
       }
     } catch(e){}
   }
@@ -1491,59 +1481,6 @@
         }, 3000);
         addLog('Everett · Live Audio', text, 'everett');
         document.getElementById('last-update').textContent = 'Last update: ' + new Date().toTimeString().slice(0,8);
-      }
-    } catch(e) {}
-  }
-
-  async function pollRiley() {
-    try {
-      const r = await fetch('/riley/status');
-      const d = await r.json();
-      document.getElementById('stat-inbox').textContent = d.inbox_depth || 0;
-      document.getElementById('stat-outbox').textContent = d.outbox_depth || 0;
-
-      const rileyOn = !!d.riley_connected;
-      const rileyStatus = document.getElementById('riley-card-status');
-      const rileyInbox = document.getElementById('riley-inbox-display');
-      const rileyRing = document.getElementById('riley-ring');
-      const rileyCard = document.getElementById('riley-card');
-      const sovereign = document.getElementById('sovereign-status');
-      if (!rileyOn) {
-        if (rileyStatus && rileyStatus.textContent !== 'SPEAKING') rileyStatus.textContent = 'OFFLINE';
-        if (rileyRing) rileyRing.classList.remove('connected', 'speaking');
-        if (rileyCard) rileyCard.classList.remove('active');
-        if (sovereign) {
-          sovereign.className = 'sovereign-status';
-          sovereign.innerHTML = '<div class="dot dead"></div>NOT SEATED';
-        }
-        if (rileyInbox && !lastRiley) rileyInbox.textContent = 'Not seated.';
-      } else if (d.sovereign_disconnect_triggered) {
-        if (sovereign) {
-          sovereign.className = 'sovereign-status triggered';
-          sovereign.innerHTML = '<div class="dot dead"></div>5-4-3-2-1 TRIGGERED';
-        }
-        if (rileyStatus) rileyStatus.textContent = 'DISCONNECTED';
-      } else {
-        if (sovereign) {
-          sovereign.className = 'sovereign-status';
-          sovereign.innerHTML = '<div class="dot alive"></div>SOVEREIGN INTACT';
-        }
-        if (rileyRing) rileyRing.classList.add('connected');
-        if (rileyStatus && rileyStatus.textContent !== 'SPEAKING') rileyStatus.textContent = 'ONLINE';
-      }
-
-      if (rileyOn && d.latest_from_riley && d.latest_from_riley.text && d.latest_from_riley.text !== lastRiley) {
-        lastRiley = d.latest_from_riley.text;
-        document.getElementById('riley-inbox-display').textContent = lastRiley;
-        document.getElementById('riley-ring').classList.add('speaking');
-        document.getElementById('riley-card').classList.add('active');
-        document.getElementById('riley-card-status').textContent = 'SPEAKING';
-        setTimeout(() => {
-          document.getElementById('riley-ring').classList.remove('speaking');
-          document.getElementById('riley-card').classList.remove('active');
-          document.getElementById('riley-card-status').textContent = rileyOn ? 'ONLINE' : 'OFFLINE';
-        }, 4000);
-        addLog('Riley · Sovereign Node', lastRiley, 'riley');
       }
     } catch(e) {}
   }
@@ -1644,6 +1581,8 @@
     try {
       const sr = await fetch('/derek/status');
       const s = await sr.json();
+      const outboxStat = document.getElementById('stat-outbox');
+      if (outboxStat) outboxStat.textContent = s.outbox_depth || 0;
       const on = !!s.derek_connected;
       const ddot = document.getElementById('derek-dot');
       if (ddot) ddot.className = on ? 'dot alive' : 'dot dead';
@@ -1729,48 +1668,6 @@
     } catch (e) {}
   }
 
-  async function pollLearner() {
-    try {
-      const statusR = await fetch('/learner/status');
-      const s = await statusR.json();
-      const isOnline = s.learner_connected;
-
-      document.getElementById('learner-dot-status').className = isOnline ? 'dot alive' : 'dot dead';
-      document.getElementById('learner-dot').className = isOnline ? 'dot alive' : 'dot dead';
-      document.getElementById('stat-learner').textContent = s.inbox_depth || 0;
-
-      const r = await fetch('/learner/latest');
-      const d = await r.json();
-      const text = (d.text || '').trim();
-
-      if (isOnline && document.getElementById('learner-card-status').textContent === 'OFFLINE') {
-        document.getElementById('learner-card-status').textContent = 'ONLINE';
-        document.getElementById('learner-session-label').textContent = 'CONNECTED';
-        addLog('Learner · Student', 'Learner has joined the bridge.', 'learner');
-      } else if (!isOnline) {
-        document.getElementById('learner-card-status').textContent = 'OFFLINE';
-        document.getElementById('learner-session-label').textContent = '--';
-      }
-
-      if (text && text !== lastLearner && text !== 'Awaiting connection...') {
-        lastLearner = text;
-        document.getElementById('learner-inbox-display').textContent = text;
-        document.getElementById('learner-ring').classList.add('speaking');
-        document.getElementById('learner-card').classList.add('active');
-        document.getElementById('learner-card-status').textContent = 'SPEAKING';
-        setTimeout(() => {
-          document.getElementById('learner-ring').classList.remove('speaking');
-          document.getElementById('learner-card').classList.remove('active');
-          document.getElementById('learner-card-status').textContent = isOnline ? 'ONLINE' : 'OFFLINE';
-        }, 4000);
-        addLog('Learner · Student', text, 'learner');
-      }
-    } catch(e) {
-      document.getElementById('learner-dot-status').className = 'dot dead';
-      document.getElementById('learner-dot').className = 'dot dead';
-    }
-  }
-
   async function pollVision() {
     try {
       const r = await fetch('/vision/latest');
@@ -1804,10 +1701,9 @@
 
   setInterval(pollHealth,     3000);
   setInterval(pollTranscript, 1500);
-  setInterval(pollRiley,      2000);
+  setInterval(pollDuey,       2000);
   setInterval(pollClaude,     2000);
   setInterval(pollBrockston,  2000);
-  setInterval(pollLearner,     2000);
   async function pollFable5() {
     try {
       var statusR = await fetch('/fable5/status');
@@ -1855,8 +1751,105 @@
     } catch (e) {}
   }
 
+  async function pollOpus55() {
+    try {
+      var statusR = await fetch('/opus55/status');
+      var s = await statusR.json();
+      var isOnline = !!s.opus55_connected;
+      var opus55Dot = document.getElementById('opus55-dot');
+      var sess = document.getElementById('opus55-session-dot');
+      var sessLabel = document.getElementById('opus55-session-label');
+      var statusEl = document.getElementById('opus55-card-status');
+      var card = document.getElementById('opus55-card');
+      var ring = document.getElementById('opus55-ring');
+      var inbox = document.getElementById('opus55-inbox-display');
+      if (opus55Dot) opus55Dot.className = 'dot ' + (isOnline ? 'alive' : 'dead');
+      if (sess) sess.className = 'dot ' + (isOnline ? 'alive' : 'dead');
+      if (sessLabel) sessLabel.textContent = isOnline ? 'CONNECTED' : '--';
+      if (card) {
+        if (isOnline) card.classList.add('active');
+        else card.classList.remove('active');
+      }
+      if (ring) {
+        if (isOnline) ring.classList.add('connected');
+        else ring.classList.remove('connected');
+      }
+      if (statusEl && statusEl.textContent !== 'SPEAKING') {
+        statusEl.textContent = isOnline ? 'ONLINE' : 'OFFLINE';
+      }
+      if (!isOnline && inbox && !lastOpus55) inbox.textContent = 'Not seated.';
+      var r = await fetch('/opus55/latest');
+      var d = await r.json();
+      var text = (d.text || '').trim();
+      if (isOnline && text && text !== lastOpus55) {
+        lastOpus55 = text;
+        if (inbox) inbox.textContent = text;
+        if (ring) ring.classList.add('speaking');
+        if (card) card.classList.add('active');
+        if (statusEl) statusEl.textContent = 'SPEAKING';
+        addLog('Opus 5.5 · Claude family', text, 'opus55');
+        var inst = (document.getElementById('ide-instance') || {}).value;
+        if (inst === 'opus55') liftCommentToEditor('opus55', text);
+        setTimeout(function() {
+          if (ring) ring.classList.remove('speaking');
+          if (statusEl) statusEl.textContent = isOnline ? 'ONLINE' : 'OFFLINE';
+        }, 4000);
+      }
+    } catch (e) {}
+  }
+
+  async function pollDuey() {
+    try {
+      var statusR = await fetch('/duey/status');
+      var s = await statusR.json();
+      var isOnline = !!s.duey_connected;
+      var dueyDot = document.getElementById('duey-dot');
+      var sess = document.getElementById('duey-session-dot');
+      var sessLabel = document.getElementById('duey-session-label');
+      var statusEl = document.getElementById('duey-card-status');
+      var card = document.getElementById('duey-card');
+      var ring = document.getElementById('duey-ring');
+      var inbox = document.getElementById('duey-inbox-display');
+      var statConn = document.getElementById('stat-duey-conn');
+      var statInbox = document.getElementById('stat-duey-inbox');
+      if (statConn) statConn.textContent = isOnline ? '1' : '0';
+      if (statInbox) statInbox.textContent = s.inbox_depth || 0;
+      if (dueyDot) dueyDot.className = 'dot ' + (isOnline ? 'alive' : 'dead');
+      if (sess) sess.className = 'dot ' + (isOnline ? 'alive' : 'dead');
+      if (sessLabel) sessLabel.textContent = isOnline ? 'CONNECTED' : '--';
+      if (card) {
+        if (isOnline) card.classList.add('active');
+        else card.classList.remove('active');
+      }
+      if (ring) {
+        if (isOnline) ring.classList.add('connected');
+        else ring.classList.remove('connected');
+      }
+      if (statusEl && statusEl.textContent !== 'SPEAKING') {
+        statusEl.textContent = isOnline ? 'ONLINE' : 'OFFLINE';
+      }
+      if (!isOnline && inbox && !lastDuey) inbox.textContent = 'Not seated.';
+      var r = await fetch('/duey/latest');
+      var d = await r.json();
+      var text = (d.text || '').trim();
+      if (isOnline && text && text !== lastDuey) {
+        lastDuey = text;
+        if (inbox) inbox.textContent = text;
+        if (ring) ring.classList.add('speaking');
+        if (card) card.classList.add('active');
+        if (statusEl) statusEl.textContent = 'SPEAKING';
+        addLog('Duey · Family seat', text, 'duey');
+        setTimeout(function() {
+          if (ring) ring.classList.remove('speaking');
+          if (statusEl) statusEl.textContent = isOnline ? 'ONLINE' : 'OFFLINE';
+        }, 4000);
+      }
+    } catch (e) {}
+  }
+
   setInterval(pollOpus5,      2000);
   setInterval(pollFable5,       2000);
+  setInterval(pollOpus55,      2000);
   setInterval(pollIde,        2000);
   setInterval(pollVision,     1200);
 
@@ -1894,13 +1887,13 @@
 
   pollHealth();
   pollTranscript();
-  pollRiley();
+  pollDuey();
   if (window.__BRIDGE_BOOT__) applyBrockstonState(window.__BRIDGE_BOOT__);
   pollClaude();
   pollBrockston();
-  pollLearner();
   pollOpus5();
   pollFable5();
+  pollOpus55();
   pollIde();
   pollVision();
 

@@ -53,6 +53,8 @@ import time
 
 import websockets
 
+import seat_wake  # same folder: wakes Fable 5's own Claude when Everett speaks
+
 WS_URL = os.getenv("FABLE5_WS_URL", "ws://localhost:8765/ws/fable5")
 HEARTBEAT_S = int(os.getenv("FABLE5_HEARTBEAT_S", "20"))
 RECONNECT_MIN_S = 2
@@ -140,6 +142,10 @@ async def listen(ws) -> None:
             log.debug("heartbeat ack %s", msg.get("timestamp"))
         elif kind in ("message", "response"):
             log.info("BRIDGE → FABLE5 from=%s: %s", msg.get("from", "?"), msg.get("text", ""))
+            # 2026-11-17: Everett speaking at the meeting wakes Fable 5's own Claude,
+            # which answers through --say. Only Everett/the board wake it (seat_wake.py).
+            if kind == "message":
+                seat_wake.spawn("fable5", msg)
         else:
             log.info("BRIDGE → FABLE5 [%s]: %s", kind, msg)
 

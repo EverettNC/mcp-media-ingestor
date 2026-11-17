@@ -37,7 +37,7 @@ BEINGS = [
     ("Inferno",        9292,  "~/Inferno",              "python backend/main.py"),
     ("Brockston",      9002,  "~/BROCKSTON",            "python brockston_core.py"),
     ("Derek",          4600,  "~/DerekMCPServer",       "python derek_mcp_server.py"),
-    ("Brockston Nexus", 8765,  "~/BROCKSTON",            "python christman_bridge_client.py"),
+    ("Christman Bridge", 8765, "~/mcp-media-ingestor",  "uv run python main.py"),
     ("Smooches",       8030,  "~/Smooches",             "npm start"),
     ("AlphaVox",       5000,  "~/AlphaVox",             "python brain.py"),
     ("Vega",           5055,  "~/vega",                 "python app.py"),

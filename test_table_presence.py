@@ -3,8 +3,8 @@ The table may not report a being live unless a socket is counted.
 
 WHY: 2026-08-31. The dashboard hardcoded Derek as alive and Riley as
 CRUISE MODE / SOVEREIGN INTACT with a green lamp, while /health said
-riley_connected false and nothing counted Derek at all. Grok had no
-chair. A lamp that does not measure is a lie.
+riley_connected false and nothing counted Derek at all. A lamp that
+does not measure is a lie.
 """
 from pathlib import Path
 
@@ -30,17 +30,10 @@ class TablePresenceTests(unittest.TestCase):
         self.assertNotIn("I am here. Always.", HTML)
         self.assertNotIn("SESSION LIVE", HTML)
 
-    def test_riley_card_does_not_claim_live_on_load(self):
-        self.assertIn('id="riley-card-status">OFFLINE', HTML)
-        self.assertNotIn('id="riley-card-status">CRUISE MODE', HTML)
+    def test_duey_card_does_not_claim_live_on_load(self):
+        self.assertIn('id="duey-card-status">OFFLINE', HTML)
+        self.assertNotIn('id="duey-card-status">CRUISE MODE', HTML)
         self.assertNotIn("Tunnel warm. Standing by.", HTML)
-
-    def test_grok_has_a_chair_on_the_table(self):
-        self.assertIn('id="grok-dot"', HTML)
-        self.assertIn('id="grok-card"', HTML)
-        self.assertIn('option value="grok"', HTML)
-        self.assertIn("/ws/grok", MAIN)
-        self.assertIn('"grok"', MAIN)
 
     def test_empty_derek_latest_is_not_a_spoken_line(self):
         self.assertNotIn('"I am here. Always."', MAIN)
@@ -48,7 +41,7 @@ class TablePresenceTests(unittest.TestCase):
     def test_ide_shows_chat_error_instead_of_empty_ok(self):
         self.assertIn("d.error", HTML)
         self.assertIn("liftCommentToEditor", HTML)
-        self.assertIn('option value="grok"', HTML.split("ide-instance")[1][:800])
+        self.assertIn('option value="fable5"', HTML.split("ide-instance")[1][:800])
 
     def test_ide_output_does_not_break_every_character(self):
         self.assertNotIn("word-break: break-all;", HTML)
@@ -74,7 +67,7 @@ class TablePresenceTests(unittest.TestCase):
         self.assertIn("BRIDGE DOWN", HTML)
         catch = HTML.split("async function pollHealth()")[1].split("async function pollBrain()")[0]
         self.assertIn("bridge-dot", catch.split("catch(e)")[1])
-        self.assertIn("grok-dot", catch.split("catch(e)")[1])
+        self.assertIn("fable5-dot", catch.split("catch(e)")[1])
 
     def test_filament_is_the_word_ear(self):
         self.assertIn("127.0.0.1:4850", MAIN)
