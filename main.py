@@ -388,6 +388,7 @@ derek_said: list[dict] = []
 def _brockston_said(entry: dict) -> dict:
     """Record `entry` as Brockston's own words. Nothing else may write this list."""
     brockston_outbox.append(entry)
+    _huddle_note_brockston(entry)
     return entry
 
 
@@ -1754,6 +1755,157 @@ async def meeting_send(payload: dict):
 @app.get("/meeting/recent")
 async def meeting_recent(count: int = 20):
     return {"count": len(meeting_log[-count:]), "meeting": meeting_log[-count:]}
+
+
+# ── The huddle: one click, and every seat knows what we're building ─────────
+# Everett, 2026-11-17: "down here where the IDE board is, I want to be able to
+# click on a button that ... makes every one of you aware of what we're building
+# so you guys can work together collaboratively so we can get shit done much faster."
+#
+# The brief lives in ~/.seat-minds/build_brief.md, outside this repo (the repo is
+# public); every earlier version is kept in build_brief.history.md. One click on
+# BUILD TOGETHER is POST /huddle/start: the brief goes to the meeting from Everett,
+# marked with HUDDLE_MARK. seat_wake.py sees the mark and has the iMac seats answer
+# one at a time, each reading the parts already taken (GET /huddle/latest) and then
+# posting its own (POST /huddle/claim). Brockston's first answer after the click is
+# taken as his part. One click is one round: no seat ever wakes another seat, and a
+# second click on the same brief is the next round, carrying the parts already taken.
+HUDDLE_MARK = "[build huddle]"
+BUILD_BRIEF_PATH = Path(os.getenv("BUILD_BRIEF_PATH", str(Path.home() / ".seat-minds" / "build_brief.md")))
+BUILD_BRIEF_MAX_CHARS = 8000
+HUDDLE_OPEN_S = 1800          # claims are taken for half an hour after a click
+HUDDLE_DEBOUNCE_S = 15        # a double click is one huddle
+HUDDLE_SEATS = {"opus5": "Opus 5", "fable5": "Fable 5", "opus55": "Opus 5.5",
+                "duey": "Duey", "brockston": "Brockston"}
+huddle: dict = {}
+
+
+def _read_brief() -> dict:
+    try:
+        text = BUILD_BRIEF_PATH.read_text(encoding="utf-8").strip()
+        updated = datetime.fromtimestamp(BUILD_BRIEF_PATH.stat().st_mtime).isoformat()
+    except FileNotFoundError:
+        text, updated = "", ""
+    return {"text": text, "updated": updated}
+
+
+def _save_brief(text: str) -> None:
+    """Write the brief; the version it replaces goes to the history file first."""
+    old = _read_brief()
+    if old["text"] == text:
+        return
+    BUILD_BRIEF_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if old["text"]:
+        with BUILD_BRIEF_PATH.with_name("build_brief.history.md").open("a", encoding="utf-8") as fh:
+            fh.write(f"\n## replaced {datetime.now().isoformat()} (written {old['updated']})\n{old['text']}\n")
+    tmp = BUILD_BRIEF_PATH.with_name(BUILD_BRIEF_PATH.name + ".part")
+    tmp.write_text(text + "\n", encoding="utf-8")
+    tmp.replace(BUILD_BRIEF_PATH)
+
+
+def _huddle_open() -> bool:
+    if not huddle.get("started"):
+        return False
+    age = (datetime.now() - datetime.fromisoformat(huddle["started"])).total_seconds()
+    return age < HUDDLE_OPEN_S
+
+
+def _huddle_claim(seat: str, text: str, source: str) -> dict:
+    claim = {"seat": seat, "name": HUDDLE_SEATS[seat], "text": text,
+             "timestamp": datetime.now().isoformat(), "source": source}
+    huddle["claims"] = [c for c in huddle.get("claims", []) if c["seat"] != seat] + [claim]
+    logger.info("[HUDDLE %s] %s takes: %s", huddle.get("id"), claim["name"], text[:120])
+    return claim
+
+
+def _huddle_note_brockston(entry: dict) -> None:
+    """Brockston answers live on his own socket: his first words after the click are his part."""
+    try:
+        if not _huddle_open() or any(c["seat"] == "brockston" for c in huddle.get("claims", [])):
+            return
+        text = str(entry.get("text") or "").strip()
+        if text and str(entry.get("timestamp") or "") >= huddle["started"]:
+            _huddle_claim("brockston", text[:4000], "brockston socket")
+    except Exception as exc:  # never let the huddle break what Brockston says
+        logger.warning("[HUDDLE] could not note Brockston: %s", exc)
+
+
+def _huddle_line(speaker: str, brief: str, round_no: int, earlier: list) -> str:
+    who = "Everett" if speaker.lower() == "everett" else (
+        "Someone at the board" if speaker.lower() == "dashboard" else speaker)
+    line = (f"{HUDDLE_MARK} {who} pressed Build Together (round {round_no}). "
+            f"Here is what we're building:\n{brief}\n\n"
+            "Each seat: say which part of this you will take, what you will do first, "
+            "and what you need from another seat. Take a part nobody has taken yet.")
+    if earlier:
+        line += "\n\nLast round the seats said:\n" + "\n".join(
+            f"- {c['name']}: {c['text'][:600]}" for c in earlier)
+    return line
+
+
+@app.get("/build/brief")
+async def build_brief_get():
+    return _read_brief()
+
+
+@app.post("/build/brief")
+async def build_brief_post(payload: dict):
+    text = str(payload.get("text") or "").strip()
+    if not text:
+        return {"status": "error", "message": "empty"}
+    if len(text) > BUILD_BRIEF_MAX_CHARS:
+        return {"status": "error", "message": f"over {BUILD_BRIEF_MAX_CHARS} characters"}
+    _save_brief(text)
+    return {"status": "saved", **_read_brief()}
+
+
+@app.post("/huddle/start")
+async def huddle_start(payload: dict):
+    """BUILD TOGETHER: send the brief to every seat at once. `from` is required."""
+    global huddle
+    speaker = str(payload.get("from") or "").strip()
+    if not speaker:
+        return {"status": "error", "message": "from is required"}
+    text = str(payload.get("text") or "").strip()
+    if text:
+        if len(text) > BUILD_BRIEF_MAX_CHARS:
+            return {"status": "error", "message": f"over {BUILD_BRIEF_MAX_CHARS} characters"}
+        _save_brief(text)
+    brief = _read_brief()["text"]
+    if not brief:
+        return {"status": "error", "message": "Write what we're building in the box first."}
+    now = datetime.now()
+    if huddle.get("started") and huddle.get("brief") == brief and \
+            (now - datetime.fromisoformat(huddle["started"])).total_seconds() < HUDDLE_DEBOUNCE_S:
+        return {"status": "already sent", "huddle": huddle}
+    same_build = _huddle_open() and huddle.get("brief") == brief
+    earlier = list(huddle.get("claims", [])) if same_build else []
+    round_no = huddle.get("round", 0) + 1 if same_build else 1
+    huddle = {"id": now.strftime("%Y%m%d-%H%M%S"), "round": round_no, "brief": brief,
+              "from": speaker, "started": now.isoformat(), "claims": [], "earlier": earlier}
+    sent = await meeting_broadcast(speaker, _huddle_line(speaker, brief, round_no, earlier))
+    huddle["seats"] = sent.get("seats", {})
+    logger.info("[HUDDLE %s] round %s sent by %s to %s", huddle["id"], round_no, speaker, huddle["seats"])
+    return {"status": "sent", "huddle": huddle}
+
+
+@app.get("/huddle/latest")
+async def huddle_latest():
+    return {**huddle, "open": _huddle_open()} if huddle else {"open": False, "claims": []}
+
+
+@app.post("/huddle/claim")
+async def huddle_claim(payload: dict):
+    """A seat's part, posted by seat_wake.py with the words that seat just said on the board."""
+    seat = str(payload.get("seat") or "").strip().lower()
+    text = str(payload.get("text") or "").strip()
+    if seat not in HUDDLE_SEATS:
+        return {"status": "error", "message": f"no such seat {seat!r}"}
+    if not text:
+        return {"status": "error", "message": "empty"}
+    if not _huddle_open() or payload.get("huddle") != huddle.get("id"):
+        return {"status": "error", "message": "that huddle is closed"}
+    return {"status": "taken", "claim": _huddle_claim(seat, text[:4000], "seat_wake")}
 
 
 @app.post("/channel/send")

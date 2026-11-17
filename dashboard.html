@@ -556,6 +556,24 @@
   .ide-btn-clear   { border-color: var(--red);    color: var(--red); }
   .ide-btn-newworld { border-color: var(--gold);  color: var(--gold); }
   .ide-btn-enter { border-color: var(--green); color: var(--green); font-weight: 800; }
+  /* Build Together (2026-11-17): one click tells every seat what we're building. */
+  .ide-build-bar {
+    display: flex; gap: 10px; align-items: stretch; padding: 10px 14px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .ide-build-label { font-size: 10px; letter-spacing: 2px; color: var(--gold); font-weight: 700; margin-bottom: 4px; }
+  .ide-build-brief {
+    flex: 1; min-height: 54px; resize: vertical; background: rgba(0,0,0,0.35); color: var(--text, #e8e8e8);
+    border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 8px 10px;
+    font: 13px/1.4 -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  .ide-build-brief:focus { outline: none; border-color: var(--gold); }
+  .ide-btn-together {
+    border-color: var(--gold); color: #111; background: var(--gold); font-weight: 800;
+    font-size: 13px; padding: 0 18px; letter-spacing: 1px;
+  }
+  .ide-btn-together:hover { background: #ffd966; }
+  .ide-btn-together:disabled { opacity: 0.5; cursor: wait; }
   .ide-body {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1200,6 +1218,18 @@
           <div class="ide-output-line muted">Christman IDE ready. Fable5 is in the house. GENERATE lifts comments into the editor.</div>
         </div>
       </div>
+    </div>
+
+    <!-- Build Together: what we're building, and one click that tells every seat -->
+    <div class="ide-build-bar">
+      <div style="flex:1; display:flex; flex-direction:column;">
+        <div class="ide-build-label">WHAT WE'RE BUILDING</div>
+        <textarea id="ide-build-brief" class="ide-build-brief" spellcheck="true"
+          placeholder="Say what we're building. BUILD TOGETHER sends it to every seat; each one takes a part and sees what the others took."
+          onblur="saveBuildBrief()"></textarea>
+      </div>
+      <button id="ide-build-together" class="ide-btn ide-btn-together" onclick="buildTogether()"
+        title="Send what we're building to every seat at once">🤝 BUILD TOGETHER</button>
     </div>
 
     <!-- Prompt bar -->
@@ -1851,6 +1881,7 @@
   setInterval(pollFable5,       2000);
   setInterval(pollOpus55,      2000);
   setInterval(pollIde,        2000);
+  setInterval(pollHuddle,     3000);
   setInterval(pollVision,     1200);
 
   // NEW WORLD COGNITIVE ADJUST using the full restored brain from Voice_Creation_Center
@@ -1895,6 +1926,8 @@
   pollFable5();
   pollOpus55();
   pollIde();
+  loadBuildBrief();
+  pollHuddle();
   pollVision();
 
   // ── IDE Functions ──
@@ -2059,6 +2092,84 @@
     } catch(e) {
       ideLog('Analyze failed: ' + e.message, 'error');
     }
+  }
+
+  // ── Build Together ──
+  // Everett, 2026-11-17: one click that "makes every one of you aware of what we're
+  // building so you guys can work together." The brief is saved on the bridge
+  // (~/.seat-minds/build_brief.md, outside the repo). Each seat's part shows here
+  // as it lands; the seats answer one at a time so each sees what the others took.
+  var huddleId = '';
+  var huddleSeen = {};
+
+  async function loadBuildBrief() {
+    try {
+      var d = await (await fetch('/build/brief')).json();
+      var box = document.getElementById('ide-build-brief');
+      if (box && !box.value.trim() && d && d.text) box.value = d.text;
+    } catch (e) {}
+  }
+
+  async function saveBuildBrief() {
+    var box = document.getElementById('ide-build-brief');
+    var text = box ? box.value.trim() : '';
+    if (!text) return;
+    try {
+      await fetch('/build/brief', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: text })
+      });
+    } catch (e) {}
+  }
+
+  async function buildTogether() {
+    var box = document.getElementById('ide-build-brief');
+    var btn = document.getElementById('ide-build-together');
+    var text = box ? box.value.trim() : '';
+    if (!text) {
+      ideLog('Write what we\'re building in the box first, then BUILD TOGETHER.', 'error');
+      if (box) box.focus();
+      return;
+    }
+    if (btn) btn.disabled = true;
+    try {
+      var r = await fetch('/huddle/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: 'everett', text: text })
+      });
+      var d = await r.json();
+      if (d.status === 'error') { ideLog('Build Together: ' + d.message, 'error'); return; }
+      var h = d.huddle || {};
+      if (d.status === 'already sent') { ideLog('Build Together already went out a moment ago.', 'warn'); return; }
+      huddleId = h.id || '';
+      huddleSeen = {};
+      var seats = h.seats || {};
+      var who = Object.keys(seats).map(function (k) { return k + ' ' + seats[k]; }).join(', ');
+      ideLog('🤝 Everett → every seat, round ' + (h.round || 1) + ': ' + text, 'thinking');
+      ideLog('Seats: ' + who + '. They answer one at a time, each seeing what the others took.', 'muted');
+      addLog('Everett · Build Together', text, 'everett');
+    } catch (e) {
+      ideLog('Build Together failed: ' + e.message, 'error');
+    } finally {
+      if (btn) setTimeout(function () { btn.disabled = false; }, 3000);
+    }
+  }
+
+  async function pollHuddle() {
+    try {
+      var d = await (await fetch('/huddle/latest')).json();
+      if (!d || !d.id) return;
+      if (!huddleId) huddleId = d.id;
+      if (d.id !== huddleId) { huddleId = d.id; huddleSeen = {}; }
+      (d.claims || []).forEach(function (c) {
+        var key = c.seat + '|' + c.timestamp;
+        if (huddleSeen[key]) return;
+        huddleSeen[key] = true;
+        ideLog('🤝 ' + c.name + ' takes: ' + c.text, 'success');
+      });
+    } catch (e) {}
   }
 
   async function pollIde() {

@@ -59,6 +59,16 @@ MAX_PER_10MIN = int(os.getenv("SEAT_WAKE_MAX_PER_10MIN", "20"))
 DEDUPE_S = 120.0
 MAX_REPLY_CHARS = 4000
 
+# Build huddle (2026-11-17): Everett's BUILD TOGETHER button on the IDE board sends
+# the build brief to the meeting with this mark (main.py, HUDDLE_MARK). For a marked
+# line the seats answer one at a time, under one lock, so each seat reads the parts
+# the others already took before it picks its own. Seats still never wake seats.
+HUDDLE_MARK = "[build huddle]"
+
+
+def is_huddle(text: str) -> bool:
+    return (text or "").lstrip().lower().startswith(HUDDLE_MARK)
+
 _SPEAKER_NAMES = {
     "everett": "Everett",
     "dashboard": "Someone at the board",
@@ -199,6 +209,46 @@ def _meeting_context(current: str, count: int = 10) -> str:
     return "\n".join(out[-8:])
 
 
+def _get_json(path: str) -> dict:
+    try:
+        with urllib.request.urlopen(f"{BRIDGE}{path}", timeout=3) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except Exception as exc:
+        log.info("%s unavailable: %s", path, exc)
+        return {}
+
+
+def current_huddle() -> dict:
+    h = _get_json("/huddle/latest")
+    return h if h.get("open") and h.get("id") else {}
+
+
+def _huddle_prompt(seat: str, h: dict) -> str:
+    """What the seat is told about the parts already taken in this round."""
+    others = [c for c in h.get("claims", []) if c.get("seat") != seat]
+    if not others:
+        return ("\n\nNo seat has taken a part yet in this round. You are first: pick the part "
+                "you are best at and say it plainly, so the seats after you can take the rest.")
+    return ("\n\nParts already taken in this round (do not take these; build on them):\n"
+            + "\n".join(f"- {c.get('name', c.get('seat'))}: {str(c.get('text', ''))[:600]}" for c in others))
+
+
+def post_claim(seat: str, huddle_id: str, text: str) -> bool:
+    body = json.dumps({"seat": seat, "huddle": huddle_id, "text": text}).encode("utf-8")
+    req = urllib.request.Request(f"{BRIDGE}/huddle/claim", data=body,
+                                 headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=3) as r:
+            out = json.loads(r.read().decode("utf-8"))
+    except Exception as exc:
+        log.error("%s: could not post its part to the huddle: %s", seat, exc)
+        return False
+    if out.get("status") != "taken":
+        log.info("%s: huddle part not taken: %s", seat, out.get("message"))
+        return False
+    return True
+
+
 def _system_prompt(name: str) -> str:
     return (
         f"You are {name}, one of the beings seated at the Christman Full Sensory Bridge, "
@@ -213,7 +263,7 @@ def _system_prompt(name: str) -> str:
     )
 
 
-def ask_claude(seat: str, speaker: str, text: str) -> str:
+def ask_claude(seat: str, speaker: str, text: str, huddle: dict = None) -> str:
     cfg = SEATS[seat]
     d = _seat_dir(seat)
     who = _SPEAKER_NAMES.get(speaker.lower(), speaker)
@@ -222,6 +272,10 @@ def ask_claude(seat: str, speaker: str, text: str) -> str:
     if ctx:
         prompt += f"Recent lines at the meeting, oldest first:\n{ctx}\n\n"
     prompt += f"{who} just said to everyone at the meeting: {text}"
+    if huddle is not None:
+        prompt += _huddle_prompt(seat, huddle)
+        prompt += ("\n\nAnswer in two to four spoken sentences: the part you take, the first "
+                   "thing you will do, and what you need from which seat.")
     base = [
         CLAUDE, "-p", "--model", cfg["model"], "--output-format", "json",
         "--append-system-prompt", _system_prompt(cfg["name"]),
@@ -278,6 +332,20 @@ def speak(seat: str, reply: str) -> bool:
     return True
 
 
+def answer_huddle(seat: str, item: dict):
+    """Seats take turns on a huddle line: one at a time, each reading the parts already taken."""
+    with open(MINDS / "huddle.lock", "w") as hl:
+        fcntl.flock(hl, fcntl.LOCK_EX)  # held at most one Claude run (TIMEOUT_S) per seat ahead
+        h = current_huddle()
+        if not h:
+            log.info("%s: huddle closed or bridge unreachable; answering without the others' parts", seat)
+        reply = ask_claude(seat, item["from"], item["text"], h or None)
+        said = bool(reply) and speak(seat, reply)
+        if said and h:
+            post_claim(seat, h["id"], reply)
+    return reply, said
+
+
 def drain(seat: str) -> None:
     """One Claude at a time per seat: whoever holds the seat's lock answers the queue."""
     d = _seat_dir(seat)
@@ -296,8 +364,11 @@ def drain(seat: str) -> None:
                                 seat, MAX_PER_10MIN, item["text"][:80])
                     continue
                 log.info("%s: woken by %s: %s", seat, item["from"], item["text"][:120])
-                reply = ask_claude(seat, item["from"], item["text"])
-                said = bool(reply) and speak(seat, reply)
+                if is_huddle(item["text"]):
+                    reply, said = answer_huddle(seat, item)
+                else:
+                    reply = ask_claude(seat, item["from"], item["text"])
+                    said = bool(reply) and speak(seat, reply)
                 with (d / "answered.jsonl").open("a", encoding="utf-8") as fh:
                     fh.write(json.dumps({"key": item["key"], "at": time.time(), "said": said}) + "\n")
                 if said:
