@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The always-on Porch ear (porch_ear.py). Starts at login, comes back if it falls.
+  Install:  cp launchd/com.thechristmanai.porch-ear.plist ~/Library/LaunchAgents/
+            launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.thechristmanai.porch-ear.plist
+  Pause:    touch ~/.porch-ear/OFF      (mic closes; rm the file to listen again)
+  Stop:     launchctl bootout gui/$(id -u)/com.thechristmanai.porch-ear
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.thechristmanai.porch-ear</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/EverettN/mcp-media-ingestor/.venv/bin/python</string>
+    <string>/Users/EverettN/mcp-media-ingestor/porch_ear.py</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/EverettN/mcp-media-ingestor</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/EverettN/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>ProcessType</key>
+  <string>Interactive</string>
+  <key>StandardOutPath</key>
+  <string>/Users/EverettN/Library/Logs/ChristmanAI/porch-ear.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/EverettN/Library/Logs/ChristmanAI/porch-ear.out.log</string>
+</dict>
+</plist>
