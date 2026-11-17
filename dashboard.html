@@ -1097,7 +1097,7 @@
 
   <div class="chest-compose">
     <select id="chest-who">
-      <option value="everett">Everett</option>
+      <option value="everett">Everett · to everyone</option>
       <option value="duey">Duey</option>
       <option value="brockston">Brockston</option>
       <option value="derek">Derek</option>
@@ -1312,7 +1312,7 @@
       await fetch('/channel/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ who: who, text: text })
+        body: JSON.stringify(who === 'everett' ? { who: who, from: 'everett', text: text } : { who: who, text: text })
       });
       if (textEl) textEl.value = '';
       if (who === 'everett') pollTranscript();

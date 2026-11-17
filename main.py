@@ -247,6 +247,9 @@ def _apply_house_porch(porch: dict) -> None:
     if len(recent_transcripts) > 8:
         recent_transcripts.pop(0)
     logger.info("house feed — porch take %s (%d chars)", tid[:12], len(said))
+    # What Porch hears said aloud goes to the meeting, from "porch": the ear
+    # hears the room, so it does not put a person's name on what it heard.
+    _schedule_meeting("porch", said)
 
 
 def _apply_house_lucent(lucent: dict) -> None:
@@ -1686,6 +1689,73 @@ async def everett_send(payload: dict):
     return {"status": "received", "from": "everett", "text": text}
 
 
+# ── The meeting: one voice to every seat at once ─────────────────────────────
+# Everett, 2026-11-17: "I want this as our meeting place so I can get all of you
+# together at once" and "I want ... for me to be able to speak directly to all of
+# them at one time."
+#
+# What reaches the meeting goes to every seat on the board in one pass: Opus 5,
+# Fable 5, Opus 5.5, Duey and Brockston. A seat that is not live has it queued and
+# handed over when it sits down. The speaker is never guessed: /meeting/send needs
+# `from`, an unnamed caller is "unattributed", and what Porch hears aloud in the
+# house is from "porch", not from a person. meeting_log keeps who said what and
+# which seats had it live, for /meeting/recent.
+meeting_log: list[dict] = []
+MEETING_LOG_MAX = 200
+
+
+async def meeting_broadcast(speaker: str, text: str) -> dict:
+    text = str(text or "").strip()
+    if not text:
+        return {"status": "error", "message": "empty"}
+    entry = {
+        "from": str(speaker or "").strip() or "unattributed",
+        "text": text,
+        "timestamp": datetime.now().isoformat(),
+        "meeting": True,
+    }
+    seats: dict[str, str] = {}
+    for name, push in (
+        ("opus5", push_to_opus5),
+        ("fable5", push_to_fable5),
+        ("opus55", push_to_opus55),
+        ("duey", push_to_duey),
+    ):
+        try:
+            seats[name] = "live" if await push(dict(entry)) else "queued"
+        except Exception as exc:
+            seats[name] = f"failed: {type(exc).__name__}"
+    try:
+        await _queue_brockston({**entry, "session_id": "meeting"})
+        seats["brockston"] = "live" if brockston_ws_clients else "no socket"
+    except Exception as exc:
+        seats["brockston"] = f"failed: {type(exc).__name__}"
+    record = {**entry, "seats": seats}
+    meeting_log.append(record)
+    del meeting_log[:-MEETING_LOG_MAX]
+    logger.info("[MEETING] %s → all seats %s: %s", entry["from"], seats, text[:80])
+    return {"status": "sent", **record}
+
+
+def _schedule_meeting(speaker: str, text: str) -> None:
+    """For callers that are not coroutines but run on the bridge's event loop."""
+    try:
+        asyncio.get_running_loop().create_task(meeting_broadcast(speaker, text))
+    except RuntimeError:
+        logger.warning("[MEETING] no running loop; not sent: %s", text[:80])
+
+
+@app.post("/meeting/send")
+async def meeting_send(payload: dict):
+    """Speak to every seat at once. `from` is never assumed."""
+    return await meeting_broadcast(str(payload.get("from") or "").strip(), payload.get("text", ""))
+
+
+@app.get("/meeting/recent")
+async def meeting_recent(count: int = 20):
+    return {"count": len(meeting_log[-count:]), "meeting": meeting_log[-count:]}
+
+
 @app.post("/channel/send")
 async def channel_send(payload: dict):
     """Type onto a family card + channel log. No mic required."""
@@ -1696,7 +1766,10 @@ async def channel_send(payload: dict):
         return {"status": "error", "message": "empty"}
     if who == "everett":
         latest_transcript.update({"text": text, "timestamp": datetime.now().timestamp(), "energy": 0.0, "tone": "typed"})
-        return {"status": "received", "who": who, "text": text}
+        # Everett's own card is the meeting: what is typed on it goes to every seat.
+        speaker = str(payload.get("from") or "").strip() or "dashboard"
+        sent = await meeting_broadcast(speaker, text)
+        return {"status": "received", "who": who, "text": text, "meeting": sent.get("seats")}
     if who == "riley":
         riley_inbox.append({"from": "riley", "text": text, "timestamp": ts})
         return {"status": "received", "who": who, "text": text}
