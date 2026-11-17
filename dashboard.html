@@ -1230,10 +1230,12 @@
       </div>
       <div class="ide-header-right">
         <select id="ide-instance" class="ide-select" onchange="ideOnInstanceChange()">
-          <option value="fable5" selected>⚪ Fable5</option>
+          <option value="all" selected>👥 All of you</option>
+          <option value="opus5">🤖 Opus 5</option>
+          <option value="fable5">⚪ Fable 5</option>
+          <option value="opus55">🔷 Opus 5.5</option>
+          <option value="duey">🎧 Duey</option>
           <option value="brockston">⚡ Brockston</option>
-          <option value="claude">🧠 Claude</option>
-          <option value="opus5">🤖 Opus5</option>
         </select>
         <select id="ide-language" class="ide-select">
           <option value="python">Python</option>
@@ -1278,7 +1280,7 @@
 
       <!-- Output pane -->
       <div class="ide-output-pane">
-        <div class="ide-pane-label">OUTPUT <span id="ide-instance-badge" class="ide-badge">FABLE5</span></div>
+        <div class="ide-pane-label">OUTPUT <span id="ide-instance-badge" class="ide-badge">ALL OF YOU</span></div>
         <div id="ide-output" class="ide-output">
           <div class="ide-output-line muted">Christman IDE ready. Fable5 is in the house. GENERATE lifts comments into the editor.</div>
         </div>
@@ -1296,7 +1298,7 @@
     <!-- Prompt bar -->
     <div class="ide-prompt-bar">
       <input id="ide-prompt" class="ide-prompt-input" type="text"
-        placeholder="Type a comment to Fable5, then ENTER — it lifts into the editor" />
+        placeholder="Type a comment, then ENTER — it goes into the editor" />
       <button class="ide-btn ide-btn-enter" onclick="ideEnter()">↵ ENTER</button>
       <button class="ide-btn ide-btn-gen" onclick="ideGenerate()">✦ GENERATE FROM PROMPT</button>
       <button class="ide-btn ide-btn-newworld" onclick="newWorldAdjust()">🌍 NEW WORLD ADJUST</button>
@@ -1994,10 +1996,18 @@
   pollVision();
 
   // ── IDE Functions ──
+  // The seat picker (2026-11-17): everyone is listed, "All of you" first. All goes
+  // to the meeting; a single seat gets it on its own desk only.
+  var IDE_SEAT_NAMES = { all: 'All of you', opus5: 'Opus 5', fable5: 'Fable 5', opus55: 'Opus 5.5',
+                         duey: 'Duey', brockston: 'Brockston' };
+  function ideSeat() {
+    var v = (document.getElementById('ide-instance') || {}).value || 'all';
+    return { value: v, name: IDE_SEAT_NAMES[v] || v };
+  }
+
   function ideOnInstanceChange() {
-    var instance = document.getElementById('ide-instance').value;
     var badge = document.getElementById('ide-instance-badge');
-    if (badge) badge.textContent = instance.toUpperCase();
+    if (badge) badge.textContent = ideSeat().name.toUpperCase();
   }
 
   function ideLog(msg, cls) {
@@ -2024,19 +2034,21 @@
     var el = document.getElementById('ide-prompt');
     var text = el ? el.value.trim() : '';
     if (!text) { ideLog('Nothing to enter.', 'error'); return; }
+    var seat = ideSeat();
     liftCommentToEditor('everett', text);
-    ideLog('Everett → Fable5: ' + text, 'info');
-    addLog('Everett · to Fable5', text, 'everett');
+    ideLog('Everett → ' + seat.name + ': ' + text, 'info');
+    addLog('Everett · to ' + seat.name, text, 'everett');
     try {
       await fetch('/ide/comment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ from: 'everett', text: text })
       });
+      // All of you is Everett's own card, which is the meeting; a seat is that seat's card.
       await fetch('/channel/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ who: 'fable5', from: 'everett', text: text })
+        body: JSON.stringify({ who: seat.value === 'all' ? 'everett' : seat.value, from: 'everett', text: text })
       });
     } catch (e) {
       ideLog('Enter failed: ' + e.message, 'error');
@@ -2102,15 +2114,14 @@
     if (!prompt) { ideLog('Enter a prompt first.', 'error'); return; }
     var instance = document.getElementById('ide-instance').value;
     var lang = document.getElementById('ide-language').value;
-    var badge = document.getElementById('ide-instance-badge');
-    if (badge) badge.textContent = instance.toUpperCase();
+    ideOnInstanceChange();
     liftCommentToEditor(instance, prompt);
-    ideLog('Generating via ' + instance + '...', 'thinking');
+    ideLog('Generating via ' + ideSeat().name + '...', 'thinking');
     try {
       var r = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: prompt, language: lang, instance: instance })
+        body: JSON.stringify({ message: prompt, language: lang, instance: instance, from: 'everett' })
       });
       var d = await r.json();
       if (d.error) {
@@ -2137,15 +2148,16 @@
     var code = document.getElementById('ide-editor').value.trim();
     if (!code) { ideLog('Nothing to analyze.', 'error'); return; }
     var instance = document.getElementById('ide-instance').value;
-    ideLog('Analyzing via ' + instance + '...', 'thinking');
+    ideLog('Analyzing via ' + ideSeat().name + '...', 'thinking');
     try {
       var r = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: 'Analyze this code concisely:\n\n```\n' + code + '\n```', instance: instance })
+        body: JSON.stringify({ message: 'Analyze this code concisely:\n\n```\n' + code + '\n```', instance: instance, from: 'everett' })
       });
       var d = await r.json();
       if (d.error) ideLog(d.error, 'error');
+      if (d.note) ideLog(d.note, 'info');
       var result = d.response || d.text || d.content || '';
       if (result) {
         ideLog('--------------------------------', 'muted');

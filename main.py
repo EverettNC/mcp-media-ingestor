@@ -2567,6 +2567,38 @@ async def api_chat(payload: dict):
     language = (payload.get("language") or payload.get("lang") or "python").strip() or "python"
     lane = payload.get("nvidia_lane") or payload.get("lane") or _IDE_DEFAULT_LANE
 
+    # Everett, 2026-11-17: the workstation's seat picker lists everyone, with
+    # "All of you" first. All goes to the meeting, so every seat hears it once and
+    # answers on the board. Opus 5, Opus 5.5 and Duey get it on their own desk only.
+    # Fable 5 and Brockston keep the paths below. The speaker is never guessed.
+    if instance == "all":
+        speaker = str(payload.get("from") or "").strip() or "dashboard"
+        sent = await meeting_broadcast(speaker, message)
+        return {
+            "ok": sent.get("status") == "sent",
+            "response": "",
+            "error": None if sent.get("status") == "sent" else sent.get("message", "not sent"),
+            "provider": "meeting",
+            "instance": "all",
+            "seats": sent.get("seats", {}),
+            "note": "Sent to every seat at once. Their answers show on the board.",
+        }
+    if instance in ("opus5", "opus55", "duey"):
+        name = {"opus5": "Opus 5", "opus55": "Opus 5.5", "duey": "Duey"}[instance]
+        push = {"opus5": push_to_opus5, "opus55": push_to_opus55, "duey": push_to_duey}[instance]
+        speaker = str(payload.get("from") or "").strip() or "dashboard"
+        delivered = await push({"from": speaker, "text": message, "timestamp": datetime.now().isoformat()})
+        return {
+            "ok": True,
+            "response": "",
+            "error": None,
+            "seat_live": delivered,
+            "provider": f"{instance}-seat",
+            "instance": instance,
+            "note": (f"Sent to {name} only. The answer shows on the board." if delivered
+                     else f"{name} isn't at the board; it waits for {name} to sit down."),
+        }
+
     if instance == "fable5":
         # Fable's desk. The prompt is put on the seat; nothing is generated here
         # and no reply is made up when the chair is empty.

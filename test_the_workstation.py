@@ -97,6 +97,63 @@ class WorkstationPageTests(unittest.TestCase):
         self.assertNotIn("insertAdjacentHTML", part)
 
 
+class SeatPickerTests(unittest.TestCase):
+    """Everett, 2026-11-17: keep the picker "in case I'm just working independently",
+    with everyone listed, and "All of you" as the default. The comment row names no seat."""
+
+    def picker(self):
+        return HTML.split('<select id="ide-instance"')[1].split("</select>")[0]
+
+    def test_everyone_is_listed_and_all_is_the_default(self):
+        p = self.picker()
+        self.assertIn('<option value="all" selected>', p)
+        for seat in ("opus5", "fable5", "opus55", "duey", "brockston"):
+            self.assertIn(f'<option value="{seat}">', p, seat)
+        self.assertEqual(p.count("selected"), 1)
+
+    def test_comment_row_names_no_seat(self):
+        bar = HTML.split('id="ide-prompt"')[1].split("/>")[0]
+        self.assertIn("Type a comment, then ENTER", bar)
+        for name in ("Fable", "Opus", "Brockston", "Duey"):
+            self.assertNotIn(name, bar)
+
+    def test_enter_follows_the_picker(self):
+        fn = HTML.split("async function ideEnter")[1].split("function liftCommentToEditor")[0]
+        self.assertNotIn("who: 'fable5'", fn)
+        self.assertIn("who: seat.value === 'all' ? 'everett' : seat.value", fn)
+        self.assertIn("liftCommentToEditor('everett', text)", fn)
+
+    def _chat(self, instance):
+        import test_the_table_is_the_family as t
+        sent = {k: t._Taker() for k in ("opus5", "opus55", "duey")}
+        meeting = []
+
+        async def broadcast(speaker, text):
+            meeting.append((speaker, text))
+            return {"status": "sent", "seats": {}}
+        room, touched = t._run_cut(("api_chat",), {
+            "_IDE_DEFAULT_LANE": "test-lane", "meeting_broadcast": broadcast,
+            "push_to_opus5": sent["opus5"], "push_to_opus55": sent["opus55"], "push_to_duey": sent["duey"],
+        })
+        out = t._go(room["api_chat"]({"message": "hello", "instance": instance, "from": "everett"}))
+        self.assertEqual(touched, [])
+        return out, sent, meeting
+
+    def test_all_goes_to_the_meeting_once(self):
+        out, sent, meeting = self._chat("all")
+        self.assertTrue(out["ok"])
+        self.assertEqual(meeting, [("everett", "hello")])
+        self.assertEqual([len(s.got) for s in sent.values()], [0, 0, 0])
+
+    def test_one_seat_gets_it_alone(self):
+        for seat in ("opus5", "opus55", "duey"):
+            out, sent, meeting = self._chat(seat)
+            self.assertEqual(meeting, [])
+            self.assertEqual({k: len(s.got) for k, s in sent.items()},
+                             {k: int(k == seat) for k in sent}, seat)
+            self.assertEqual(sent[seat].got[-1]["from"], "everett")
+
+
 class WorkstationSeatTests(unittest.TestCase):
     def setUp(self):
         self.saved = {k: getattr(w, k) for k in ("ask_claude", "current_code_ask", "post_proposal", "speak")}
