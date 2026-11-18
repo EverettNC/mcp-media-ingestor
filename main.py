@@ -405,6 +405,18 @@ def _derek_waiting() -> int:
     return sum(1 for waiting in claude_outbox if any(waiting is said for said in derek_said))
 
 
+def _derek_present() -> bool:
+    """Derek is seated on his socket, or his connector pinged or polled in the last 90 s.
+
+    Everett, 2026-11-18: "yeah, change his polling". Derek's own server talks over
+    HTTP (/derek/ping, /derek/latest), not the socket, so the board's Derek light
+    stayed dark while he was talking.
+    """
+    if active_connections.get("derek", 0) > 0:
+        return True
+    return bool(_DEREK_BRIDGE_AVAILABLE and _derek_bridge.http_connected())
+
+
 riley_bridge = RileyBridge(instance_id="instance_309")
 
 _DASHBOARD_PATH = os.path.join(os.path.dirname(__file__), "dashboard.html")
@@ -1043,7 +1055,7 @@ async def opus5_status():
 @app.get("/derek/status")
 async def derek_status():
     return {
-        "derek_connected": active_connections.get("derek", 0) > 0,
+        "derek_connected": _derek_present(),
         # Derek's own words only. claude_outbox also carries the brain's lines,
         # the IDE's broadcast and words typed to him.
         "outbox_depth": _derek_waiting(),
@@ -3147,7 +3159,7 @@ async def health():
         "brockston_clients": active_connections["brockston"],
         "brockston_live": _brockston_live_status(),
         "riley_connected": active_connections["riley"] > 0,
-        "derek_connected": active_connections.get("derek", 0) > 0,
+        "derek_connected": _derek_present(),
         "opus5_connected": active_connections.get("opus5", 0) > 0,
         "fable5_connected": active_connections.get("fable5", 0) > 0,
         "duey_connected": active_connections.get("duey", 0) > 0,
