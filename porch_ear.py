@@ -99,6 +99,7 @@ _state_lock = threading.Lock()
 _hearing = False           # True only while the mic is delivering real sound
 _last_audio = 0.0
 _zero_since: float | None = None
+_rack_down = False         # the porch rack stopped answering; logged once
 
 
 # ── One ear at a time ─────────────────────────────────────────────────────────
@@ -158,11 +159,21 @@ def _post_live(listening: bool, take: dict | None = None) -> bool:
     body: dict = {"listening": bool(listening)}
     if take is not None:
         body["take"] = take
+    global _rack_down
     try:
-        return bool(_post_json(LIVE_URL, body, timeout=2.0).get("ok"))
+        ok = bool(_post_json(LIVE_URL, body, timeout=2.0).get("ok"))
     except Exception as exc:
-        log.warning("porch rack did not answer (%s)", str(exc)[:120])
+        # Say it once when the house goes quiet, not four times a second
+        # (2026-11-19: the house was down a night and this line wrote 26 MB).
+        if not _rack_down:
+            log.warning("porch rack did not answer (%s); will say again when it is back",
+                        str(exc)[:120])
+        _rack_down = True
         return False
+    if _rack_down:
+        log.info("porch rack is answering again")
+    _rack_down = False
+    return ok
 
 
 def _heartbeat() -> None:
